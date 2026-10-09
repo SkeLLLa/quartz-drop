@@ -9,12 +9,12 @@ Hotkeys use Carbon `RegisterEventHotKey`, so no Input Monitoring permission is n
 
 ## Install
 
-| Method                                  | Command                                                       |
-| --------------------------------------- | ------------------------------------------------------------- |
-| mise (packslip backend, mise 2026.9.2+) | `mise use -g packslip:github.com/SkeLLLa/quartz-drop`         |
-| packslip (1.5.1+)                       | `packslip install github.com/SkeLLLa/quartz-drop`             |
-| Release download                        | see below                                                     |
-| From source                             | see below                                                     |
+| Method                                  | Command                                                                                |
+| --------------------------------------- | -------------------------------------------------------------------------------------- |
+| mise (packslip backend, mise 2026.9.2+) | `mise use -g packslip:github.com/SkeLLLa/quartz-drop`                                  |
+| packslip (1.5.1+)                       | `packslip install github.com/SkeLLLa/quartz-drop --pin ps1_3lbhdizx3fdmmm5ki37kzixcwy` |
+| Release download                        | see below                                                                              |
+| From source                             | see below                                                                              |
 
 Homebrew is not available yet; see the [roadmap](roadmap.md).
 
@@ -23,9 +23,8 @@ Homebrew is not available yet; see the [roadmap](roadmap.md).
 Both verify the signed packslip manifest of the release and install the `quartz-drop` command (the
 executable inside the bundle, `QuartzDrop.app/Contents/MacOS/quartz-drop`) on `PATH`. Running
 `quartz-drop` starts the app. Without `--pin`, packslip trusts the repository GitHub reports for the
-name on first install and remembers it. A signer pin (`--pin ps1_...`), which identifies this
-repository's release workflow and is the same for every release, will be published in the README
-after the first release.
+name on first install and remembers it. The signer pin (`--pin ps1_3lbhdizx3fdmmm5ki37kzixcwy`) identifies this
+repository's release workflow and is the same for every release.
 
 Accessibility permission is granted to the app as usual (see [Permissions](#permissions)). The
 archive is not downloaded through a browser, so the quarantine flag is usually not set. If macOS
@@ -40,7 +39,8 @@ Finder instead, use the release download below.
    [latest release](https://github.com/SkeLLLa/quartz-drop/releases/latest). Archives are universal
    (Apple silicon and Intel).
 2. Verify it (see [Distribution](distribution.md#verifying-a-download)).
-3. Copy `QuartzDrop.app` to `/Applications`.
+3. Copy `QuartzDrop.app` to `/Applications`. When upgrading, quit quartz-drop and delete the old
+   copy first.
 4. If the release is not notarized, clear the quarantine flag once:
 
    ```bash
@@ -60,6 +60,7 @@ Tools; full Xcode is not required.
 mise trust
 mise bootstrap --only tools,task   # install tools, check the CLT, run `swift package resolve`
 mise run bundle-universal          # dist/QuartzDrop.app (arm64 + x86_64)
+rm -rf /Applications/QuartzDrop.app # quit quartz-drop first when upgrading
 cp -R dist/QuartzDrop.app /Applications/
 ```
 

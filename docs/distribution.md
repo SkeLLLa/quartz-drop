@@ -71,9 +71,9 @@ The packslip manifest is signed keylessly through GitHub OIDC. It records the ta
 `QuartzDrop.app/Contents/MacOS/quartz-drop`, and a resource `app` as `QuartzDrop.app`. This is
 what `mise use -g packslip:github.com/SkeLLLa/quartz-drop` and `packslip install` use.
 
-The signer pin (`ps1_...`) identifies the release workflow and is the same for every release. It
-is not known until the first release: `verify-packslip` prints it to the job summary, then the
-maintainer sets the `PACKSLIP_PIN` repository variable and adds the pin to the README.
+The signer pin `ps1_3lbhdizx3fdmmm5ki37kzixcwy` identifies the release workflow and is the same for every release.
+`verify-packslip` checks the published manifest against the `PACKSLIP_PIN` repository variable and
+prints the pin to its job summary.
 
 ## Verifying a download
 
@@ -83,10 +83,10 @@ shasum -a 256 -c SHA256SUMS --ignore-missing
 gh attestation verify quartz-drop-<version>-macos-universal.zip --repo SkeLLLa/quartz-drop
 ```
 
-To verify the packslip manifest (add `--pin ps1_...` once the README lists the signer pin):
+To verify the packslip manifest:
 
 ```bash
-packslip verify packslip.sigstore.json --artifact quartz-drop-<version>-macos-universal.tar.gz
+packslip verify packslip.sigstore.json --pin ps1_3lbhdizx3fdmmm5ki37kzixcwy --artifact quartz-drop-<version>-macos-universal.tar.gz
 ```
 
 ## CI

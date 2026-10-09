@@ -4,6 +4,17 @@ import AppKit
 enum About {
     static let repository = URL(string: "https://github.com/SkeLLLa/quartz-drop")!
 
+    /// The app bundle, also when started through a symlink (packslip and mise link
+    /// `Contents/MacOS/quartz-drop` into a bin directory, and `Bundle.main` then looks next to
+    /// the link instead of the real executable).
+    static let bundle: Bundle = {
+        guard Bundle.main.bundleIdentifier == nil,
+            let executable = Bundle.main.executableURL?.resolvingSymlinksInPath()
+        else { return Bundle.main }
+        let contents = executable.deletingLastPathComponent().deletingLastPathComponent()
+        return Bundle(url: contents.deletingLastPathComponent()) ?? Bundle.main
+    }()
+
     /// Full commit SHA stamped into Info.plist by scripts/bundle.sh; nil for `swift run` builds.
     static var commit: String? { bundleValue("QDGitCommit") }
 
@@ -36,7 +47,7 @@ enum About {
     }
 
     private static func bundleValue(_ key: String) -> String? {
-        guard let value = Bundle.main.object(forInfoDictionaryKey: key) as? String,
+        guard let value = bundle.object(forInfoDictionaryKey: key) as? String,
             !value.isEmpty, !value.hasPrefix("__")
         else { return nil }
         return value
@@ -84,7 +95,7 @@ enum About {
         append(
             "quartz-drop is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License, version 3 or (at your option) any later version. It comes with ABSOLUTELY NO WARRANTY. "
         )
-        if let copying = Bundle.main.url(forResource: "COPYING", withExtension: nil) {
+        if let copying = bundle.url(forResource: "COPYING", withExtension: nil) {
             link("Full license text", copying)
         } else {
             link("Full license text", repository.appendingPathComponent("blob/master/COPYING"))

@@ -68,13 +68,14 @@ With [packslip](https://packslip.dev) (1.5.1 or newer), which checks the release
 before installing:
 
 ```bash
-packslip install github.com/SkeLLLa/quartz-drop
+packslip install github.com/SkeLLLa/quartz-drop --pin ps1_3lbhdizx3fdmmm5ki37kzixcwy
 ```
 
 From source, with [mise](https://mise.jdx.dev) and the Xcode Command Line Tools:
 
 ```bash
 mise run bundle-universal
+rm -rf /Applications/QuartzDrop.app   # quit quartz-drop first when upgrading
 cp -R dist/QuartzDrop.app /Applications/
 ```
 

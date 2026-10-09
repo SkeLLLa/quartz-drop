@@ -76,9 +76,9 @@ mise x git-cliff@2.14.2 -- git cliff --bumped-version   # next version, for exam
 mise x git-cliff@2.14.2 -- git cliff --unreleased       # changelog entries for it
 ```
 
-After the first release, `verify-packslip` prints the signer pin (`ps1_...`) to its job summary.
-Set it as the repository variable `PACKSLIP_PIN` (Settings → Secrets and variables → Actions →
-Variables) and add it to the README install table.
+The signer pin is `ps1_3lbhdizx3fdmmm5ki37kzixcwy` (printed by `verify-packslip` to its job summary). It is
+set as the repository variable `PACKSLIP_PIN` (Settings → Secrets and variables → Actions →
+Variables) and listed in the README; if it ever changes, update both.
 
 Optional signing secrets (all repository secrets; signing is skipped when
 `MACOS_CERTIFICATE_P12` is empty):

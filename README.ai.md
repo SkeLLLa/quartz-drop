@@ -60,7 +60,7 @@ Pick the first method that applies and that the user is happy with. Homebrew is 
 | --- | --- |
 | User wants the app in `/Applications` (default) | release download, see below |
 | `mise` 2026.9.2+ present | `mise use -g packslip:github.com/SkeLLLa/quartz-drop` |
-| `packslip` 1.5.1+ present | `packslip install github.com/SkeLLLa/quartz-drop` |
+| `packslip` 1.5.1+ present | `packslip install github.com/SkeLLLa/quartz-drop --pin ps1_3lbhdizx3fdmmm5ki37kzixcwy` |
 | Swift toolchain via mise, user wants a build | `mise trust && mise bootstrap --only tools,task && mise run bundle-universal` |
 
 **Release download:**
@@ -70,6 +70,8 @@ dir=$(mktemp -d) && cd "$dir"
 gh release download --repo SkeLLLa/quartz-drop --pattern 'quartz-drop-*-macos-universal.zip'
 # without gh: curl -LO from https://github.com/SkeLLLa/quartz-drop/releases/latest
 unzip quartz-drop-*-macos-universal.zip
+# Upgrading: quit quartz-drop, then remove the old copy; mv cannot replace a non-empty bundle.
+rm -rf /Applications/QuartzDrop.app
 mv QuartzDrop.app /Applications/
 ```
 
@@ -81,12 +83,14 @@ need it once).
 
 **mise / packslip:** both verify the signed manifest and put only the `quartz-drop` command (the
 executable inside the bundle) on `PATH`; running `quartz-drop` starts the app. They do not copy
-`QuartzDrop.app` to `/Applications`. The signer `--pin` identifies the release workflow, not a
-version. It will be published in [`README.md`](README.md) after the first release: add
-`--pin <value>` if `README.md` shows one, and never guess it.
+`QuartzDrop.app` to `/Applications`. The signer `--pin ps1_3lbhdizx3fdmmm5ki37kzixcwy` identifies the release workflow, not a
+version, and is the same for every release; take it from [`README.md`](README.md), never guess it.
+`mise` may refuse a release younger than the user's `minimum_release_age`; then install an explicit
+version (`packslip:github.com/SkeLLLa/quartz-drop@<version>`) only if the user agrees.
 
 **From source:** after `mise run bundle-universal` the app is `dist/QuartzDrop.app`; copy it with
-`cp -R dist/QuartzDrop.app /Applications/`. `mise run bundle` builds the host architecture only.
+`rm -rf /Applications/QuartzDrop.app && cp -R dist/QuartzDrop.app /Applications/` (quit
+quartz-drop first; `cp -R` onto an existing bundle merges and can leave an invalid signature). `mise run bundle` builds the host architecture only.
 
 Confirm with `command -v quartz-drop` (mise/packslip) or `ls -d /Applications/QuartzDrop.app`.
 If the command is not found, the install's bin directory isn't on `PATH`; tell the user rather

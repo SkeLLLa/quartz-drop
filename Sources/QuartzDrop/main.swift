@@ -43,7 +43,7 @@ case .check:
         fail(error.localizedDescription)
     }
 case .run:
-    if let bundleID = Bundle.main.bundleIdentifier,
+    if let bundleID = About.bundle.bundleIdentifier,
         let other = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
             .first(where: { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier })
     {
