@@ -24,11 +24,12 @@ The script:
 
 1. Builds each architecture in its own scratch path, `.build/bundle-<arch>`, because the swift.org
    toolchain would otherwise put every `--arch` build in one products directory.
-2. Combines them with `lipo` and assembles `QuartzDrop.app` with `packaging/Info.plist`
+2. Combines them with `lipo`, strips debug and local symbols, and assembles `QuartzDrop.app` with `packaging/Info.plist`
    (version from `version.txt`).
-3. Builds `AppIcon.icns` from `resources/icons/quartz-drop-512.png`.
+3. Builds `AppIcon.icns` from `resources/icons/quartz-drop-1024.png`.
 4. Signs: ad-hoc with `-`, otherwise with the hardened runtime and a timestamp, then verifies.
-5. Writes `quartz-drop-<version>-macos-<arch>.zip` (`<arch>` is `universal`, `arm64`, or `x86_64`).
+5. Writes `quartz-drop-<version>-macos-<arch>.zip` (`<arch>` is `universal`, `arm64`, or `x86_64`)
+   without extended attributes, so the archive holds no AppleDouble `._*` files.
 
 Universal builds need the swift.org toolchain from mise; the Command Line Tools' own Swift lacks
 the x86_64 compatibility libraries.

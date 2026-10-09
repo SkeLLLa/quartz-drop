@@ -1,7 +1,7 @@
 # quartz-drop
 
 <p align="center">
-  <img src="resources/icons/quartz-drop-512.png" alt="quartz-drop icon" width="128" height="128">
+  <img src="resources/icons/quartz-drop.svg" alt="quartz-drop icon" width="128" height="128">
 </p>
 
 [![CI](https://github.com/SkeLLLa/quartz-drop/actions/workflows/ci.yml/badge.svg)](https://github.com/SkeLLLa/quartz-drop/actions/workflows/ci.yml)

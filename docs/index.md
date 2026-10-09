@@ -1,7 +1,7 @@
 # quartz-drop
 
 <p align="center">
-  <img src="../resources/icons/quartz-drop-512.png" alt="quartz-drop icon" width="96" height="96">
+  <img src="../resources/icons/quartz-drop.svg" alt="quartz-drop icon" width="96" height="96">
 </p>
 
 `quartz-drop` is a macOS dropdown app launcher. It registers global hotkeys, finds or starts the

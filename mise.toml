@@ -49,6 +49,11 @@ run = "make lint"
 description = "Everything CI checks: lint, build, test"
 run = "make check"
 
+[tasks.artwork]
+description = "Render the PNG artwork from the SVG sources in resources/"
+tools = { resvg = "0.48.1" }
+run = "scripts/render-artwork.sh"
+
 [tasks.bundle]
 description = "Build dist/QuartzDrop.app for this Mac and zip it"
 run = "make bundle"

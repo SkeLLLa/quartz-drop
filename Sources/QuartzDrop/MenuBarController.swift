@@ -17,9 +17,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     func show() {
         guard item == nil else { return }
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        item.button?.image = NSImage(
-            systemSymbolName: "rectangle.lefthalf.inset.filled",
-            accessibilityDescription: "quartz-drop")
+        item.button?.image = MenuBarIcon.make()
         let menu = NSMenu()
         menu.delegate = self
         item.menu = menu

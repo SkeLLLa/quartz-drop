@@ -35,7 +35,7 @@ what CI runs; the workflows are in `.github/workflows`.
   the menu bar and SwiftUI Settings UI.
 - `Tests/QuartzDropCoreTests/`: Swift Testing (`import Testing`, `@Test`, `#expect`), one suite per
   Core file.
-- `resources/`: `example-config.toml`, `icons/`, `badges/`.
+- `resources/`: `example-config.toml`, `icons/`, `social/`, `badges/`.
 - `packaging/Info.plist` and `scripts/bundle.sh`: bundle template and the script that builds and
   signs the app bundle.
 
@@ -74,3 +74,18 @@ Optional signing secrets (all repository secrets; signing is skipped when
 | `APPLE_APP_PASSWORD`         | App-specific password for notarization              |
 
 Notarization runs only when all six are set.
+
+## Artwork
+
+The icon is plasma-drop's raindrop terminal mark recolored as rose quartz, with crystal facets,
+on a macOS app icon tile. The SVGs are the sources:
+
+- `resources/icons/quartz-drop.svg`: app icon. `quartz-drop-1024.png` is rendered from it and
+  `scripts/bundle.sh` builds `AppIcon.icns` from that PNG.
+- `resources/social/github-social-preview.svg`: the repository social preview (upload
+  `github-social-preview.png` under Settings → General → Social preview).
+- The menu bar icon is drawn in code (`Sources/QuartzDrop/MenuBarIcon.swift`) as a template image
+  from the same compact drop mark, so it needs no bundle resources.
+
+After editing an SVG, run `mise run artwork` (it installs resvg) and commit the PNGs. The bundle
+build only reads the PNG, so neither CI nor `make bundle` needs resvg.

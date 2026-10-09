@@ -51,13 +51,12 @@ strip -S -x "$APP/Contents/MacOS/quartz-drop"
 sed "s/__VERSION__/$VERSION/g" packaging/Info.plist > "$APP/Contents/Info.plist"
 
 # --- 3. Icon: PNG -> iconset -> icns ----------------------------------------
-SRC_ICON="resources/icons/quartz-drop-512.png"
+SRC_ICON="resources/icons/quartz-drop-1024.png"
 ICONSET="$(mktemp -d)/AppIcon.iconset"
 mkdir -p "$ICONSET"
 for size in 16 32 128 256 512; do
     sips -z "$size" "$size" "$SRC_ICON" --out "$ICONSET/icon_${size}x${size}.png" > /dev/null
     double=$((size * 2))
-    # 512@2x (1024px) upscales the 512px source; acceptable for the placeholder icon.
     sips -z "$double" "$double" "$SRC_ICON" --out "$ICONSET/icon_${size}x${size}@2x.png" > /dev/null
 done
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
