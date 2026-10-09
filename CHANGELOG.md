@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0](https://github.com/SkeLLLa/quartz-drop/compare/v0.1.0...v1.0.0) - 2026-10-09
+
+### Added
+
+- [**breaking**] stable release
 ## [0.1.0](https://github.com/SkeLLLa/quartz-drop/releases/tag/v0.1.0) - 2026-10-09
 
 ### Added
