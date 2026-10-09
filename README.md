@@ -5,46 +5,116 @@
 </p>
 
 [![CI](https://github.com/SkeLLLa/quartz-drop/actions/workflows/ci.yml/badge.svg)](https://github.com/SkeLLLa/quartz-drop/actions/workflows/ci.yml)
-[![Release](https://github.com/SkeLLLa/quartz-drop/actions/workflows/release.yml/badge.svg)](https://github.com/SkeLLLa/quartz-drop/actions/workflows/release.yml)
+[![Release](https://img.shields.io/github/v/release/SkeLLLa/quartz-drop)](https://github.com/SkeLLLa/quartz-drop/releases/latest)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](COPYING)
 
-`quartz-drop` is a macOS dropdown app launcher. It registers global hotkeys, finds or starts the
-apps you configure, and moves their windows onto a portion of the screen, such as the left half.
-It talks to the window server (Quartz Compositor, the macOS counterpart of KWin) through the
-Accessibility API.
+Dropdown windows for any Mac app, on a hotkey.
 
-Think Yakuake-style dropdown behavior, but for Terminal, Finder, Safari, or any other app you add
-to the config. It runs in the background with an optional menu bar icon and is configured with
-TOML.
+Press a shortcut and Terminal (or Finder, Safari, Notes, anything you like) appears in its spot,
+say the left half of the screen, already focused. Press it again and it's gone. If the app isn't
+running, quartz-drop starts it first. Think of a Quake-style dropdown terminal, but for every app
+you use.
 
-It is a port of [plasma-drop](https://github.com/SkeLLLa/plasma-drop), the KDE Plasma 6 version,
-and accepts the same config format with a few documented differences.
+> **Setting up with an AI assistant?** Point it at [`README.ai.md`](README.ai.md). It contains
+> step-by-step instructions written for agents.
+
+## What you get
+
+- **One hotkey per app.** It shows the app, focuses it, and hides it again.
+- **Your layout, every time.** Each app goes to the same place: a half, a corner, a fixed size,
+  a particular display.
+- **One at a time.** Showing one app hides the others, so they never pile up.
+- **Starts what's missing.** Press the hotkey for an app that isn't open and it opens.
+- **Leaves no mess.** On quit, every window goes back where it was.
+- **Quiet.** No Dock icon. There's a small menu bar icon, and you can hide that too.
+- **A plain text config.** One TOML file that reloads as soon as you save it.
+
+quartz-drop is the macOS version of [plasma-drop](https://github.com/SkeLLLa/plasma-drop) for KDE
+Plasma, and reads the same config.
 
 > [!NOTE]
-> quartz-drop was converted from [plasma-drop](https://github.com/SkeLLLa/plasma-drop) (Rust, KDE
-> Plasma) to Swift and macOS with AI assistance.
+> quartz-drop was converted from plasma-drop (Rust, KDE Plasma) to Swift and macOS with AI
+> assistance.
 
-## Install and First Run
+## Install
 
-Requires macOS 13 (Ventura) or newer and Accessibility permission. Download a universal build from
-the [latest release](https://github.com/SkeLLLa/quartz-drop/releases/latest) or build from source
-with `mise run bundle-universal`, copy `QuartzDrop.app` to `/Applications`, and open it. See
-[Getting started](docs/getting-started.md) for installation, signing and quarantine notes,
-permissions, the first-run flow, the menu bar menu, and the command line.
+You need macOS 13 (Ventura) or newer. Builds are universal, so they run on both Apple silicon and
+Intel Macs.
 
-## Configure Apps
+1. Download the `.zip` from the
+   [latest release](https://github.com/SkeLLLa/quartz-drop/releases/latest).
+2. Unzip it and move `QuartzDrop.app` to your Applications folder.
+3. If macOS says the app can't be opened, run this once in Terminal:
 
-Configuration is TOML. Each `[[app]]` entry defines one managed app, its hotkey, how to find or
-launch it, and where to place it.
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/QuartzDrop.app
+   ```
+
+   This is needed because releases aren't notarized by Apple yet.
+
+<details>
+<summary>Other ways to install</summary>
+
+These put the `quartz-drop` command on your `PATH`. Running it starts the app.
+
+With [mise](https://mise.jdx.dev) (2026.9.2 or newer):
+
+```bash
+mise use -g packslip:github.com/SkeLLLa/quartz-drop
+```
+
+With [packslip](https://packslip.dev) (1.5.1 or newer), which checks the release signature
+before installing:
+
+```bash
+packslip install github.com/SkeLLLa/quartz-drop
+```
+
+From source, with [mise](https://mise.jdx.dev) and the Xcode Command Line Tools:
+
+```bash
+mise run bundle-universal
+cp -R dist/QuartzDrop.app /Applications/
+```
+
+Homebrew isn't available yet. If you'd like to help, see the [roadmap](docs/roadmap.md).
+
+</details>
+
+## First run
+
+1. Open QuartzDrop. It creates a starter config and opens its Settings window.
+2. When asked, allow quartz-drop in System Settings → Privacy & Security → Accessibility. It needs
+   this permission to move and resize other apps' windows.
+3. Try a hotkey from the starter config:
+
+   | Hotkey         | App                       |
+   | -------------- | ------------------------- |
+   | <kbd>⌃⌥F</kbd> | Finder, left half         |
+   | <kbd>⌃⌥S</kbd> | Safari, right half        |
+   | <kbd>⌃`</kbd>  | Terminal, top of screen   |
+   | <kbd>⌃⌥N</kbd> | Notes                     |
+
+4. To change them, choose **Open Config** from the menu bar icon. Changes apply when you save.
+
+Want it running all the time? Turn on **Launch at login** in Settings → General.
+
+> [!TIP]
+> After an update, macOS may forget the Accessibility permission. If hotkeys stop moving
+> windows, remove QuartzDrop from the Accessibility list and add it again.
+
+More on settings, the menu bar menu, the command line and hotkey conflicts is in
+[Getting started](docs/getting-started.md).
+
+## Configure
+
+The config is `~/.config/quartz-drop/config.toml`. Each `[[app]]` block is one app:
 
 ```toml
 [[app]]
 name = "finder"
 hotkey = "ctrl+alt+f"
 bundle_id = "com.apple.finder"
-attach_mode = "find-or-start"
-hide_behavior = "minimize"
-hide_on_focus_lost = true
 
 [app.placement]
 width = "50%"
@@ -52,42 +122,16 @@ height = "100%"
 position = "left"
 ```
 
-Common fields:
+To find an app's `bundle_id`, run `osascript -e 'id of app "Safari"'`.
 
-| Field                | Purpose                                                                |
-| -------------------- | ---------------------------------------------------------------------- |
-| `name`               | Unique app identifier                                                  |
-| `hotkey`             | Global shortcut, for example `ctrl+alt+f`                              |
-| `bundle_id`          | Bundle identifier used to match and start the app                      |
-| `filename`           | App name or path (`/Applications/Safari.app`) matcher and launcher     |
-| `command`            | Explicit launch command array                                          |
-| `arguments`          | Arguments for the launch built from `filename` (not with `command`)    |
-| `process_name`       | Regex matched against bundle ID, app name, and executable name         |
-| `window_title`       | Regex matched against the window title                                 |
-| `attach_mode`        | `find` or `find-or-start` (default)                                    |
-| `hide_behavior`      | `hide` (default), `minimize`, or `offscreen`                           |
-| `hide_on_focus_lost` | Hide after focus moves to another window                               |
-| `[app.placement]`    | Width, height, position, offsets, and target screen                    |
+The [starter config](resources/example-config.toml) has more examples, and
+[Configuration](docs/configuration.md) lists every option.
 
-Behavior in short:
+### Coming from plasma-drop?
 
-- Only one managed app is visible at a time; showing one hides the others.
-- Pressing the hotkey of a visible but unfocused app brings it forward instead of hiding it.
-- With `find-or-start`, a missing app is launched and quartz-drop waits up to about 20 seconds for
-  its window.
-- Placement uses the screen's visible frame, which excludes the menu bar and Dock.
-- Original window frames are restored when quit, including on Ctrl-C and SIGTERM.
-- Apps with a minimum window size may not fit the requested rectangle exactly; this is logged.
-
-See [resources/example-config.toml](resources/example-config.toml) for a complete example and
-[docs/configuration.md](docs/configuration.md) for every option.
-
-## Differences from plasma-drop
-
-Existing plasma-drop configs load unchanged; options that do not apply on macOS are ignored, never
-errors. The main differences are the new `bundle_id` key, a default `hide_behavior` of `hide`, and
-display-name based `screen`. See [Differences from plasma-drop](docs/configuration.md#differences-from-plasma-drop)
-and [Using a plasma-drop config](docs/configuration.md#using-a-plasma-drop-config).
+Copy your `config.toml` to `~/.config/quartz-drop/` and it loads unchanged. Linux-only options
+are skipped, and Settings lists them. Then point `filename` or `bundle_id` at the Mac versions of
+your apps. See [Using a plasma-drop config](docs/configuration.md#using-a-plasma-drop-config).
 
 ## Alternatives
 
@@ -97,30 +141,19 @@ and [Using a plasma-drop config](docs/configuration.md#using-a-plasma-drop-confi
   switch apps, no placement
 - iTerm2 hotkey window: dropdown behavior for a single app
 
-## Documentation
+## Contributing
 
-- [Getting started](docs/getting-started.md)
-- [Configuration](docs/configuration.md)
-- [Distribution](docs/distribution.md)
-- [Development](docs/development.md)
-- [Documentation index](docs/index.md)
-
-## Development
+Ideas, bug reports and pull requests are welcome. The [roadmap](docs/roadmap.md) lists what's
+missing, such as window animations and a Homebrew tap, and [Development](docs/development.md)
+explains how to build and test:
 
 ```bash
-mise run check   # what CI runs: swift format lint, jactionlint, shellcheck, build, tests
-mise run fmt     # format Swift sources
-mise run run     # run from the build directory with -v
-mise tasks       # list all tasks
+mise run check   # everything CI runs: lint, build, tests
 ```
 
-The mise tasks wrap the Makefile targets of the same name. CI installs the same tools with
-`jdx/mise-action`, and `mise.lock` pins their download URLs and checksums. See
-[docs/development.md](docs/development.md) for details and
-[docs/distribution.md](docs/distribution.md) for releases.
-
-Version bumps, changelog updates, tags, and GitHub releases are managed by release-please from
-Conventional Commit messages; do not edit `CHANGELOG.md` by hand.
+All documentation: [Getting started](docs/getting-started.md) ·
+[Configuration](docs/configuration.md) · [Distribution](docs/distribution.md) ·
+[Development](docs/development.md) · [Roadmap](docs/roadmap.md)
 
 ## Support
 

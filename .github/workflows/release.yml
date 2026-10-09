@@ -6,40 +6,96 @@ on:
       - master
 
 jobs:
-  release-please:
-    name: Release Please
-    if: ${{ github.repository_owner == 'SkeLLLa' }}
+  quality:
+    name: Quality gate
+    if: ${{ github.repository_owner == 'SkeLLLa' && !contains(github.event.head_commit.message, '[skip ci]') }}
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install tools (mise.toml)
+        uses: jdx/mise-action@v5
+
+      - name: Run checks
+        run: mise run check
+
+  # Same flow as the sibling Rust repos' release-plz setup, with git-cliff: bump the version,
+  # commit it to master as github-actions[bot], tag, and create the release. No release PR, so
+  # the default GITHUB_TOKEN is enough.
+  release:
+    name: Release
+    needs: quality
+    if: ${{ github.repository_owner == 'SkeLLLa' && !contains(github.event.head_commit.message, '[skip ci]') }}
     runs-on: ubuntu-latest
     outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
+      released: ${{ steps.release.outputs.released }}
       version: ${{ steps.release.outputs.version }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     concurrency:
       group: release-${{ github.ref }}
       cancel-in-progress: false
     permissions:
       contents: write
-      pull-requests: write
     steps:
-      - name: Run release-please
-        id: release
-        uses: googleapis/release-please-action@v4
+      - name: Checkout repository
+        uses: actions/checkout@v7
         with:
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install git-cliff
+        uses: taiki-e/install-action@v2
+        with:
+          tool: git-cliff@2.14.2
+
+      - name: Bump version, commit, tag, and create the release
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # cliff.toml: the first release is v0.1.0; afterwards feat bumps minor, others patch.
+          TAG_NAME="$(git cliff --bumped-version)"
+          VERSION="${TAG_NAME#v}"
+          if git rev-parse -q --verify "refs/tags/${TAG_NAME}" > /dev/null; then
+            echo "Nothing to release: ${TAG_NAME} already exists"
+            echo "released=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          NOTES="${RUNNER_TEMP}/notes.md"
+          git cliff --unreleased --tag "${TAG_NAME}" --strip all > "${NOTES}"
+          git cliff --tag "${TAG_NAME}" --output CHANGELOG.md
+          echo "${VERSION}" > version.txt
+          sed -i "s/^let appVersion = \".*\"/let appVersion = \"${VERSION}\"/" Sources/QuartzDrop/Version.swift
+          grep -qF "let appVersion = \"${VERSION}\"" Sources/QuartzDrop/Version.swift
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md version.txt Sources/QuartzDrop/Version.swift
+          git commit -m "chore(release): ${TAG_NAME} [skip ci]"
+          git tag "${TAG_NAME}"
+          git push --atomic origin HEAD:master "refs/tags/${TAG_NAME}"
+          gh release create "${TAG_NAME}" --title "${TAG_NAME}" --notes-file "${NOTES}" --verify-tag
+          {
+            echo "released=true"
+            echo "version=${VERSION}"
+            echo "tag_name=${TAG_NAME}"
+          } >> "${GITHUB_OUTPUT}"
 
   build:
     name: Build and publish macOS assets
-    needs: release-please
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    needs: release
+    if: ${{ needs.release.outputs.released == 'true' }}
     runs-on: macos-latest
     permissions:
       contents: write
       id-token: write
       attestations: write
     env:
-      VERSION: ${{ needs.release-please.outputs.version }}
-      TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
+      VERSION: ${{ needs.release.outputs.version }}
+      TAG_NAME: ${{ needs.release.outputs.tag_name }}
       # Optional Developer ID signing + notarization; skipped when secrets are absent.
       MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
       MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
@@ -51,16 +107,13 @@ jobs:
       - name: Checkout release tag
         uses: actions/checkout@v7
         with:
-          ref: ${{ needs.release-please.outputs.tag_name }}
+          ref: ${{ needs.release.outputs.tag_name }}
 
       - name: Install tools (mise.toml)
         uses: jdx/mise-action@v5
 
       - name: Show toolchain
         run: swift --version
-
-      - name: Run checks
-        run: mise run check
 
       - name: Import Developer ID certificate
         if: ${{ env.MACOS_CERTIFICATE_P12 != '' }}
@@ -166,5 +219,112 @@ jobs:
         if: ${{ always() && env.MACOS_CERTIFICATE_P12 != '' }}
         run: security delete-keychain "${RUNNER_TEMP}/build.keychain-db" || true
 
-  # TODO: homebrew-tap job: after `build`, bump the quartz-drop cask (version + sha256
-  # from SHA256SUMS) in SkeLLLa/homebrew-tap, e.g. via a PR using a tap-scoped token.
+  packslip:
+    name: Sign packslip manifest
+    needs: [release, build]
+    if: ${{ needs.release.outputs.released == 'true' }}
+    runs-on: ubuntu-latest
+    # Signing never holds release-write access; publish-packslip uploads the bundle.
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      # The tag sits on the version-bump commit, not on github.sha (the push that triggered
+      # this run), so record the commit the tag actually names.
+      - name: Resolve tagged commit
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ needs.release.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          echo "commit=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${TAG_NAME}" --jq .sha)" >> "${GITHUB_OUTPUT}"
+
+      # A macOS archive named for no architecture is recorded as universal (os = darwin, no
+      # arch). The command is the bundle's executable; the bundle itself is an app resource.
+      - name: Sign packslip manifest
+        id: packslip
+        uses: jdx/packslip@v1
+        with:
+          download: quartz-drop-*-macos-universal.tar.gz
+          bin: quartz-drop=QuartzDrop.app/Contents/MacOS/quartz-drop
+          resources: app=archive:QuartzDrop.app
+          tag: ${{ needs.release.outputs.tag_name }}
+          version: ${{ needs.release.outputs.version }}
+          commit: ${{ steps.source.outputs.commit }}
+          attest: link
+          upload: false
+
+      - name: Keep signed bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: packslip-bundle
+          retention-days: 1
+          path: ${{ steps.packslip.outputs.bundle }}
+          if-no-files-found: error
+
+  publish-packslip:
+    name: Publish packslip manifest
+    needs: [release, packslip]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Fetch signed bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: packslip-bundle
+          path: packslip
+
+      - name: Upload signed bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ needs.release.outputs.tag_name }}
+        run: |
+          set -euo pipefail
+          test -f packslip/packslip.sigstore.json
+          gh release upload "${TAG_NAME}" packslip/packslip.sigstore.json --repo "${GITHUB_REPOSITORY}" --clobber
+
+  verify-packslip:
+    name: Verify published packslip manifest
+    needs: [release, publish-packslip]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      # Signer fingerprint published in README.md; constant across releases. Set the
+      # PACKSLIP_PIN repository variable from the first release's job summary.
+      PACKSLIP_PIN: ${{ vars.PACKSLIP_PIN }}
+    steps:
+      - name: Install packslip
+        uses: taiki-e/install-action@v2
+        with:
+          tool: packslip@1.6.0
+
+      # Check what users download: the public release URLs, not this run's local files.
+      - name: Verify manifest against the published tarball
+        env:
+          TAG_NAME: ${{ needs.release.outputs.tag_name }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG_NAME}"
+          asset="quartz-drop-${VERSION}-macos-universal.tar.gz"
+          curl -fsSLO --retry 3 "${base}/${asset}"
+          curl -fsSLO --retry 3 "${base}/packslip.sigstore.json"
+          pin_args=()
+          if [ -n "${PACKSLIP_PIN}" ]; then
+            pin_args=(--pin "${PACKSLIP_PIN}")
+          else
+            echo "::warning::PACKSLIP_PIN is not set; verifying by identity only"
+          fi
+          packslip verify packslip.sigstore.json \
+            --identity-prefix "https://github.com/${GITHUB_REPOSITORY}/" \
+            --issuer https://token.actions.githubusercontent.com \
+            "${pin_args[@]}" \
+            --artifact "${asset}"
+          {
+            echo "### packslip signer fingerprint"
+            echo
+            echo "\`$(packslip pin packslip.sigstore.json)\`"
+          } >> "${GITHUB_STEP_SUMMARY}"

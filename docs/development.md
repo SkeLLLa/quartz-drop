@@ -50,16 +50,35 @@ Run `mise run fmt` to apply it; `mise run lint` checks it strictly.
 
 ## Releasing
 
-Releases use [release-please](https://github.com/googleapis/release-please) (config in
-`release-please-config.json`, manifest in `.release-please-manifest.json`):
+Releases are cut directly from `master` with [git-cliff](https://git-cliff.org) (config in
+`cliff.toml`, pinned to 2.14.2 in the workflow). There is no release pull request.
 
 1. Use Conventional Commits (`feat:`, `fix:`, ...) on pull requests to `master`.
-2. On every push to `master`, `release.yml` runs release-please, which opens or updates a release
-   pull request that bumps `version.txt` and `Sources/QuartzDrop/Version.swift` (the line marked
-   `// x-release-please-version`) and writes `CHANGELOG.md`. Do not edit those by hand.
-3. Merging the release pull request creates the tag and GitHub release. The `build` job then builds
-   the universal app, optionally signs and notarizes it, and attaches the artifacts; see
-   [Distribution](distribution.md).
+2. On every push to `master` (except commits containing `[skip ci]`), `release.yml` runs the
+   quality gate (`mise run check`), then the `release` job. git-cliff computes the next version
+   from the commits since the last tag: the first release is `v0.1.0`, afterwards `feat` bumps the
+   minor version and everything else bumps the patch. If there is nothing new, no release is made.
+3. The job regenerates `CHANGELOG.md`, writes `version.txt` and `Sources/QuartzDrop/Version.swift`,
+   commits `chore(release): vX [skip ci]` to `master` as `github-actions[bot]`, tags `vX`, and
+   creates the GitHub release with the git-cliff notes. Do not edit those files by hand.
+4. The `build` job builds the universal app, optionally signs and notarizes it, and attaches the
+   artifacts. The `packslip`, `publish-packslip` and `verify-packslip` jobs sign and publish the
+   packslip manifest; see [Distribution](distribution.md).
+
+The workflow uses the default `GITHUB_TOKEN`: no PAT and no "Allow GitHub Actions to create pull
+requests" setting. `master` must allow `github-actions[bot]` to push, so branch protection must
+not block it.
+
+Preview the next release locally:
+
+```bash
+mise x git-cliff@2.14.2 -- git cliff --bumped-version   # next version, for example v0.2.0
+mise x git-cliff@2.14.2 -- git cliff --unreleased       # changelog entries for it
+```
+
+After the first release, `verify-packslip` prints the signer pin (`ps1_...`) to its job summary.
+Set it as the repository variable `PACKSLIP_PIN` (Settings → Secrets and variables → Actions →
+Variables) and add it to the README install table.
 
 Optional signing secrets (all repository secrets; signing is skipped when
 `MACOS_CERTIFICATE_P12` is empty):

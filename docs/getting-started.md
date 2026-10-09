@@ -7,7 +7,34 @@
 
 Hotkeys use Carbon `RegisterEventHotKey`, so no Input Monitoring permission is needed.
 
-## Install from a release
+## Install
+
+| Method                                  | Command                                                       |
+| --------------------------------------- | ------------------------------------------------------------- |
+| mise (packslip backend, mise 2026.9.2+) | `mise use -g packslip:github.com/SkeLLLa/quartz-drop`         |
+| packslip (1.5.1+)                       | `packslip install github.com/SkeLLLa/quartz-drop`             |
+| Release download                        | see below                                                     |
+| From source                             | see below                                                     |
+
+Homebrew is not available yet; see the [roadmap](roadmap.md).
+
+### With mise or packslip
+
+Both verify the signed packslip manifest of the release and install the `quartz-drop` command (the
+executable inside the bundle, `QuartzDrop.app/Contents/MacOS/quartz-drop`) on `PATH`. Running
+`quartz-drop` starts the app. Without `--pin`, packslip trusts the repository GitHub reports for the
+name on first install and remembers it. A signer pin (`--pin ps1_...`), which identifies this
+repository's release workflow and is the same for every release, will be published in the README
+after the first release.
+
+Accessibility permission is granted to the app as usual (see [Permissions](#permissions)). The
+archive is not downloaded through a browser, so the quarantine flag is usually not set. If macOS
+still blocks the app, use the `xattr` command below on the installed `QuartzDrop.app`.
+
+The manifest also records `QuartzDrop.app` as a resource named `app`; to run the app from
+Finder instead, use the release download below.
+
+### From a release download
 
 1. Download the zip or tar.gz from the
    [latest release](https://github.com/SkeLLLa/quartz-drop/releases/latest). Archives are universal
@@ -21,10 +48,10 @@ Hotkeys use Carbon `RegisterEventHotKey`, so no Input Monitoring permission is n
    ```
 
 Releases are signed with a Developer ID and notarized only when the maintainers' signing secrets
-are configured; otherwise they are ad-hoc signed. An ad-hoc signed release is still quarantined
-when downloaded, so step 4 applies to it.
+are configured; otherwise they are ad-hoc signed. An ad-hoc signed release downloaded in a browser
+is still quarantined, so step 4 applies to it.
 
-## Install from source
+### From source
 
 Tools are pinned in `mise.toml` and `mise.lock`. The macOS SDK comes from the Xcode Command Line
 Tools; full Xcode is not required.

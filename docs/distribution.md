@@ -53,15 +53,27 @@ unsigned or un-notarized release emits a CI warning and adds a line to the relea
 
 ## Release artifacts
 
-`release.yml` runs on pushes to `master`. After release-please creates a release, the `build` job
-publishes, for version `<version>`:
+`release.yml` runs on pushes to `master`; see [Development](development.md#releasing) for how the
+version is computed. When there is something to release, the `release` job commits the version
+bump, tags it, and creates the GitHub release. The `build` job then publishes, for version
+`<version>`:
 
 - `quartz-drop-<version>-macos-universal.zip`
 - `quartz-drop-<version>-macos-universal.tar.gz` (contains `QuartzDrop.app`)
 - a `.sha256` file for each archive
 - `SHA256SUMS` covering both archives
+- `packslip.sigstore.json`, a signed packslip manifest for the tar.gz
 
 Both archives carry a GitHub build provenance attestation.
+
+The packslip manifest is signed keylessly through GitHub OIDC. It records the tar.gz as os
+`darwin` with no architecture (universal), the command `quartz-drop` as
+`QuartzDrop.app/Contents/MacOS/quartz-drop`, and a resource `app` as `QuartzDrop.app`. This is
+what `mise use -g packslip:github.com/SkeLLLa/quartz-drop` and `packslip install` use.
+
+The signer pin (`ps1_...`) identifies the release workflow and is the same for every release. It
+is not known until the first release: `verify-packslip` prints it to the job summary, then the
+maintainer sets the `PACKSLIP_PIN` repository variable and adds the pin to the README.
 
 ## Verifying a download
 
@@ -71,12 +83,24 @@ shasum -a 256 -c SHA256SUMS --ignore-missing
 gh attestation verify quartz-drop-<version>-macos-universal.zip --repo SkeLLLa/quartz-drop
 ```
 
+To verify the packslip manifest (add `--pin ps1_...` once the README lists the signer pin):
+
+```bash
+packslip verify packslip.sigstore.json --artifact quartz-drop-<version>-macos-universal.tar.gz
+```
+
 ## CI
 
 - `ci.yml`: commit message check on pull requests, `make check`, and a universal bundle smoke test (`make bundle-universal`)
   that checks both architectures with `lipo -archs`, verifies the signature, and runs
   `--version`.
-- `release.yml`: release-please, then build, sign, notarize (optional), checksum, attest, and
-  publish.
+- `release.yml`, on pushes to `master` without `[skip ci]`:
+  - `quality`: `mise run check` on macOS.
+  - `release`: git-cliff computes the version, updates `CHANGELOG.md`, `version.txt` and
+    `Version.swift`, commits as `github-actions[bot]`, tags, and creates the GitHub release.
+  - `build`: universal bundle, optional signing and notarization, archives, checksums,
+    attestation, upload.
+  - `packslip`, `publish-packslip`, `verify-packslip`: sign the packslip manifest, upload
+    `packslip.sigstore.json` to the release, and verify the published files.
 
 Both install tools with `jdx/mise-action@v5`.

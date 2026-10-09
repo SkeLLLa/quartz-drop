@@ -26,6 +26,7 @@ TOML config format with a few documented differences.
 - [Configuration](configuration.md): every config key, matching, hiding, and placement.
 - [Development](development.md): mise setup, tasks, tests, project layout, releasing.
 - [Distribution](distribution.md): bundle script, signing, notarization, release artifacts.
+- [Roadmap](roadmap.md): planned features and distribution channels.
 
 ## Related Project
 

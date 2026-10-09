@@ -9,7 +9,7 @@ Project context:
 - `Sources/QuartzDropCore` holds pure, testable logic (config, window matching, geometry, hotkey parsing). It must not import AppKit, ApplicationServices, or Carbon.
 - `Sources/QuartzDrop` holds the AppKit, Accessibility (AX) and Carbon hotkey glue plus the menu-bar UI.
 - `Tests/` uses Swift Testing (`import Testing`, `@Test`, `#expect`), not XCTest.
-- Version lives in `version.txt` and `Sources/QuartzDrop/Version.swift` (line marked `// x-release-please-version`); release-please updates both. Do not suggest hand-editing them or `CHANGELOG.md`.
+- Version lives in `version.txt` and `Sources/QuartzDrop/Version.swift` ; the release workflow (git-cliff, from Conventional Commits) updates both plus `CHANGELOG.md`. Do not suggest hand-editing them.
 - Tools are pinned in `mise.toml`/`mise.lock` (Swift, jactionlint, shellcheck) and installed in CI by `jdx/mise-action`. The primary local validation command is `mise run check` (= `make check`: swift format lint, jactionlint, shellcheck, swift build, swift test). App bundles are built by `scripts/bundle.sh`.
 - `resources/example-config.toml` is mirrored in `Sources/QuartzDropCore/ExampleConfig.swift` (`ExampleConfigTests` checks they match). Config keys and menu contents are documented in `README.md` and `docs/`; keep them in sync with code changes (including the Support Ukraine links in `SupportLinks.swift`).
 - Animations are not supported; `[app.animation]` is validated like plasma-drop and ignored. Options that do not apply on macOS are "ignored on macOS" notes, never errors.
