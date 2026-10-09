@@ -105,7 +105,15 @@ private struct GeneralTab: View {
                 }
             }
             Section {
-                LabeledContent("Version", value: appVersion)
+                LabeledContent("Version", value: About.versionLine)
+                if let buildDate = About.buildDate {
+                    LabeledContent("Built", value: buildDate)
+                }
+                HStack {
+                    Link("Source code", destination: About.repository)
+                    Spacer()
+                    Button("About quartz-drop…") { About.show() }
+                }
             }
         }
         .formStyle(.grouped)

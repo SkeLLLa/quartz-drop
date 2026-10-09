@@ -7,6 +7,7 @@
 [![CI](https://github.com/SkeLLLa/quartz-drop/actions/workflows/ci.yml/badge.svg)](https://github.com/SkeLLLa/quartz-drop/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/SkeLLLa/quartz-drop)](https://github.com/SkeLLLa/quartz-drop/releases/latest)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](COPYING)
+[![KDE Plasma: plasma-drop](https://img.shields.io/badge/KDE_Plasma-plasma--drop-1d99f3?logo=kde)](https://github.com/SkeLLLa/plasma-drop)
 
 Dropdown windows for any Mac app, on a hotkey.
 

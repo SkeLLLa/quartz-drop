@@ -48,7 +48,13 @@ fi
 # Drop debug and local symbols; the release binary does not need them (about 40% smaller).
 strip -S -x "$APP/Contents/MacOS/quartz-drop"
 
-sed "s/__VERSION__/$VERSION/g" packaging/Info.plist > "$APP/Contents/Info.plist"
+COMMIT="$(git rev-parse HEAD 2> /dev/null || echo unknown)"
+if [ -n "$(git status --porcelain 2> /dev/null)" ]; then COMMIT="$COMMIT-dirty"; fi
+BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+sed -e "s/__VERSION__/$VERSION/g" -e "s/__COMMIT__/$COMMIT/g" -e "s/__BUILD_DATE__/$BUILD_DATE/g" \
+    packaging/Info.plist > "$APP/Contents/Info.plist"
+# GPL text ships with the app; the About panel points at it.
+cp COPYING "$APP/Contents/Resources/COPYING"
 
 # --- 3. Icon: PNG -> iconset -> icns ----------------------------------------
 SRC_ICON="resources/icons/quartz-drop-1024.png"

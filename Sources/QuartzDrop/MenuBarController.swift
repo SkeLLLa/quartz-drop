@@ -80,6 +80,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menu.addItem(supportItem())
         add(menu, "Hide Menu Bar Icon", #selector(hideIcon))
         menu.addItem(.separator())
+        add(menu, "About quartz-drop", #selector(about))
         menu.addItem(
             NSMenuItem(
                 title: "Quit quartz-drop", action: #selector(NSApplication.terminate(_:)),
@@ -139,6 +140,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func requestAccess() { controller.requestAccessibility() }
     @objc private func settings() { openSettings() }
+    @objc private func about() { About.show() }
     @objc private func openConfig() { controller.openConfig() }
     @objc private func reloadConfig() { controller.reload() }
 }

@@ -19,7 +19,7 @@ switch options.command {
 case .help:
     print(Options.usage)
 case .version:
-    print("quartz-drop \(appVersion)")
+    print("quartz-drop \(About.versionLine)")
 case .printExampleConfig:
     print(exampleConfig)
 case .initConfig(let force):

@@ -58,7 +58,13 @@ jobs:
         run: |
           set -euo pipefail
           # cliff.toml: the first release is v0.1.0; afterwards feat bumps minor, others patch.
+          # A version.txt that names an untagged version wins, so a release can be set by hand
+          # (for example 1.0.0) by committing version.txt.
           TAG_NAME="$(git cliff --bumped-version)"
+          PINNED="v$(tr -d '[:space:]' < version.txt)"
+          if ! git rev-parse -q --verify "refs/tags/${PINNED}" > /dev/null; then
+            TAG_NAME="${PINNED}"
+          fi
           VERSION="${TAG_NAME#v}"
           if git rev-parse -q --verify "refs/tags/${TAG_NAME}" > /dev/null; then
             echo "Nothing to release: ${TAG_NAME} already exists"

@@ -16,6 +16,10 @@
     <string>__VERSION__</string>
     <key>CFBundleVersion</key>
     <string>__VERSION__</string>
+    <key>QDGitCommit</key>
+    <string>__COMMIT__</string>
+    <key>QDBuildDate</key>
+    <string>__BUILD_DATE__</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>LSUIElement</key>
@@ -25,7 +29,7 @@
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSHumanReadableCopyright</key>
-    <string>GPL-3.0-or-later</string>
+    <string>Copyright © SkeLLLa and contributors. GPL-3.0-or-later.</string>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.utilities</string>
 </dict>
