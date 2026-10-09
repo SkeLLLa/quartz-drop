@@ -1,0 +1,170 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  release-please:
+    name: Release Please
+    if: ${{ github.repository_owner == 'SkeLLLa' }}
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
+    concurrency:
+      group: release-${{ github.ref }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Run release-please
+        id: release
+        uses: googleapis/release-please-action@v4
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  build:
+    name: Build and publish macOS assets
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: macos-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      VERSION: ${{ needs.release-please.outputs.version }}
+      TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
+      # Optional Developer ID signing + notarization; skipped when secrets are absent.
+      MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+      MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+      MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+
+      - name: Install tools (mise.toml)
+        uses: jdx/mise-action@v5
+
+      - name: Show toolchain
+        run: swift --version
+
+      - name: Run checks
+        run: mise run check
+
+      - name: Import Developer ID certificate
+        if: ${{ env.MACOS_CERTIFICATE_P12 != '' }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN="${RUNNER_TEMP}/build.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          echo "${MACOS_CERTIFICATE_P12}" | base64 --decode > "${RUNNER_TEMP}/certificate.p12"
+          security create-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN}"
+          security set-keychain-settings -lut 21600 "${KEYCHAIN}"
+          security unlock-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN}"
+          security import "${RUNNER_TEMP}/certificate.p12" -P "${MACOS_CERTIFICATE_PASSWORD}" \
+            -A -t cert -f pkcs12 -k "${KEYCHAIN}"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s \
+            -k "${KEYCHAIN_PASSWORD}" "${KEYCHAIN}"
+          security list-keychains -d user -s "${KEYCHAIN}" login.keychain-db
+          rm -f "${RUNNER_TEMP}/certificate.p12"
+          echo "CODESIGN_IDENTITY=${MACOS_SIGNING_IDENTITY}" >> "${GITHUB_ENV}"
+
+      - name: Build universal app bundle
+        env:
+          ARCHS: universal
+          OUT_DIR: dist
+        run: scripts/bundle.sh
+
+      - name: Signing status
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          NOTES="release-assets/NOTES.md"
+          if [ -z "${MACOS_CERTIFICATE_P12}" ]; then
+            echo "::warning::Release is ad-hoc signed (signing secrets not configured)"
+            {
+              echo "> **Note:** this build is unsigned (ad-hoc signed) and not notarized."
+              echo "> After installing, run \`xattr -dr com.apple.quarantine /Applications/QuartzDrop.app\`"
+              echo "> and re-grant Accessibility permission after updating."
+            } > "${NOTES}"
+          elif [ -z "${APPLE_ID}" ] || [ -z "${APPLE_TEAM_ID}" ] || [ -z "${APPLE_APP_PASSWORD}" ]; then
+            echo "::warning::Release is signed but not notarized"
+            {
+              echo "> **Note:** this build is signed with a Developer ID but not notarized."
+              echo "> macOS Gatekeeper may warn on first launch; you may need to approve it in System Settings."
+            } > "${NOTES}"
+          else
+            : > "${NOTES}"
+          fi
+
+      - name: Notarize and staple
+        if: ${{ env.MACOS_CERTIFICATE_P12 != '' && env.APPLE_ID != '' && env.APPLE_TEAM_ID != '' && env.APPLE_APP_PASSWORD != '' }}
+        run: |
+          set -euo pipefail
+          NOTARY_ZIP="${RUNNER_TEMP}/notarize.zip"
+          ditto -c -k --norsrc --noextattr --keepParent dist/QuartzDrop.app "${NOTARY_ZIP}"
+          xcrun notarytool submit "${NOTARY_ZIP}" \
+            --apple-id "${APPLE_ID}" \
+            --team-id "${APPLE_TEAM_ID}" \
+            --password "${APPLE_APP_PASSWORD}" \
+            --wait
+          xcrun stapler staple dist/QuartzDrop.app
+          xcrun stapler validate dist/QuartzDrop.app
+          spctl -a -vv -t exec dist/QuartzDrop.app
+          # Re-zip so the published archive contains the stapled ticket.
+          rm -f "dist/quartz-drop-${VERSION}-macos-universal.zip"
+          ditto -c -k --norsrc --noextattr --keepParent dist/QuartzDrop.app "dist/quartz-drop-${VERSION}-macos-universal.zip"
+
+      - name: Assemble release assets
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          ZIP="quartz-drop-${VERSION}-macos-universal.zip"
+          TGZ="quartz-drop-${VERSION}-macos-universal.tar.gz"
+          cp "dist/${ZIP}" "release-assets/${ZIP}"
+          COPYFILE_DISABLE=1 tar --no-mac-metadata -C dist -czf "release-assets/${TGZ}" QuartzDrop.app
+          cd release-assets
+          for f in "${ZIP}" "${TGZ}"; do
+            shasum -a 256 "${f}" > "${f}.sha256"
+          done
+          shasum -a 256 "${ZIP}" "${TGZ}" > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            release-assets/quartz-drop-${{ env.VERSION }}-macos-universal.zip
+            release-assets/quartz-drop-${{ env.VERSION }}-macos-universal.tar.gz
+
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ env.TAG_NAME }}
+          append_body: true
+          body_path: release-assets/NOTES.md
+          fail_on_unmatched_files: true
+          files: |
+            release-assets/quartz-drop-${{ env.VERSION }}-macos-universal.zip
+            release-assets/quartz-drop-${{ env.VERSION }}-macos-universal.tar.gz
+            release-assets/quartz-drop-${{ env.VERSION }}-macos-universal.zip.sha256
+            release-assets/quartz-drop-${{ env.VERSION }}-macos-universal.tar.gz.sha256
+            release-assets/SHA256SUMS
+
+      - name: Remove temporary keychain
+        if: ${{ always() && env.MACOS_CERTIFICATE_P12 != '' }}
+        run: security delete-keychain "${RUNNER_TEMP}/build.keychain-db" || true
+
+  # TODO: homebrew-tap job: after `build`, bump the quartz-drop cask (version + sha256
+  # from SHA256SUMS) in SkeLLLa/homebrew-tap, e.g. via a PR using a tap-scoped token.

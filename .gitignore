@@ -1,0 +1,25 @@
+# Build output
+.build/
+dist/
+release-assets/
+DerivedData/
+*.dSYM/
+
+# SwiftPM / Xcode
+.swiftpm/
+*.xcodeproj
+*.xcworkspace
+xcuserdata/
+
+# Local tool overrides
+mise.local.toml
+.mise.local.toml
+.env
+.env.*
+
+# Editors and OS
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store

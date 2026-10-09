@@ -1,0 +1,62 @@
+# Development tools for quartz-drop. One-time setup on a new machine:
+#
+#   mise trust && mise bootstrap --only tools,task
+#
+# which installs the tools below and runs the `bootstrap` task (Xcode Command Line Tools check
+# and package resolution). Afterwards `mise run check` mirrors CI.
+
+[tools]
+# swift.org toolchain (includes `swift format`); the macOS SDK still comes from the Xcode
+# Command Line Tools or Xcode.
+swift = "6.4.0"
+# Maintained actionlint fork (https://github.com/jdx/jactionlint).
+jactionlint = "1.8.2"
+shellcheck = "0.11.0"
+
+# Tasks wrap the Makefile so `make <target>` keeps working without mise.
+[tasks.bootstrap]
+description = "Check the Xcode Command Line Tools and resolve Swift packages (run by `mise bootstrap`)"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+if ! xcode-select -p >/dev/null 2>&1; then
+    echo "Xcode Command Line Tools are missing (they provide the macOS SDK)." >&2
+    echo "Starting the installer; run 'mise bootstrap' again when it finishes." >&2
+    xcode-select --install || true
+    exit 1
+fi
+swift --version
+swift package resolve
+'''
+
+[tasks.build]
+description = "Debug build"
+run = "make build"
+
+[tasks.test]
+description = "Run unit tests"
+run = "make test"
+
+[tasks.fmt]
+description = "Format Swift sources in place"
+run = "make fmt"
+
+[tasks.lint]
+description = "Check formatting, workflows, and shell scripts"
+run = "make lint"
+
+[tasks.check]
+description = "Everything CI checks: lint, build, test"
+run = "make check"
+
+[tasks.bundle]
+description = "Build dist/QuartzDrop.app for this Mac and zip it"
+run = "make bundle"
+
+[tasks.bundle-universal]
+description = "Build a universal (arm64 + x86_64) dist/QuartzDrop.app and zip it"
+run = "make bundle-universal"
+
+[tasks.run]
+description = "Run quartz-drop from the build directory with verbose logging"
+run = "make run"

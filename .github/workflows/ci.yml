@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  conventional-commits:
+    name: Conventional commit messages
+    if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Verify Conventional Commit messages
+        uses: opensource-nepal/commitlint@v2
+
+  quality:
+    name: Swift quality (macOS)
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install tools (mise.toml)
+        uses: jdx/mise-action@v5
+      - name: Show toolchain
+        run: swift --version
+      - name: Cache SwiftPM build
+        uses: actions/cache@v6
+        with:
+          path: .build
+          key: ${{ runner.os }}-swiftpm-${{ hashFiles('mise.toml') }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-swiftpm-${{ hashFiles('mise.toml') }}-
+      - name: Run quality checks
+        run: make check
+
+  bundle:
+    name: Bundle smoke test (universal)
+    runs-on: macos-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install tools (mise.toml)
+        uses: jdx/mise-action@v5
+      - name: Show toolchain
+        run: swift --version
+      - name: Build universal app bundle (ad-hoc signed)
+        run: make bundle-universal
+      - name: Verify bundle
+        run: |
+          set -euo pipefail
+          APP="dist/QuartzDrop.app"
+          BIN="${APP}/Contents/MacOS/quartz-drop"
+          ARCHS_FOUND="$(lipo -archs "${BIN}")"
+          echo "Architectures: ${ARCHS_FOUND}"
+          for arch in arm64 x86_64; do
+            case " ${ARCHS_FOUND} " in
+              *" ${arch} "*) ;;
+              *) echo "missing architecture ${arch}" >&2; exit 1 ;;
+            esac
+          done
+          codesign --verify --deep --strict --verbose=2 "${APP}"
+          "${BIN}" --version
+      - name: Upload bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: quartz-drop-macos-universal
+          retention-days: 7
+          if-no-files-found: error
+          path: dist/quartz-drop-*-macos-universal.zip
