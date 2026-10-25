@@ -5,6 +5,9 @@ on:
     branches: [master]
   pull_request:
 
+# Nothing is granted by default; each job asks for what it needs.
+permissions: {}
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -14,47 +17,114 @@ jobs:
     name: Conventional commit messages
     if: github.event_name == 'pull_request' && github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read
       pull-requests: read
     steps:
       - name: Verify Conventional Commit messages
-        uses: opensource-nepal/commitlint@v2
+        uses: opensource-nepal/commitlint@9c112b70de7b0e51f81d12a5268a451db5419794 # v2.0.0
+
+  # Every action is pinned to a commit SHA (Dependabot bumps the SHA and its version comment).
+  # An unpinned action fails here and in the release pin-gate. If
+  # `.github/actions/**/action.y?ml` appears, the gate and this check must cover it too.
+  pin-check:
+    name: Action pins
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test the pin checker
+        run: scripts/test-action-pins.sh
+      - name: Check action pins
+        run: scripts/check-action-pins.sh .github/workflows/*.yml
+
+  actions-lint:
+    name: Workflow lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The release archive, checked against its checksum and against the build provenance of
+      # jdx/jactionlint's release workflow at the same tag. The runner image has shellcheck,
+      # which jactionlint runs on every `run:` script.
+      - name: Install jactionlint (version from mise.toml)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          v="$(sed -n 's/^jactionlint = "\([^"]*\)"$/\1/p' mise.toml)"
+          test -n "${v}"
+          dir="${RUNNER_TEMP}/jactionlint"
+          mkdir -p "${dir}/bin"
+          cd "${dir}"
+          tgz="jactionlint_${v}_linux_amd64.tar.gz"
+          gh release download "v${v}" -R jdx/jactionlint -p "${tgz}" -p "jactionlint_${v}_checksums.txt"
+          grep -E "^[0-9a-f]{64}  ${tgz}\$" "jactionlint_${v}_checksums.txt" | sha256sum -c -
+          gh attestation verify "${tgz}" -R jdx/jactionlint \
+            --signer-workflow jdx/jactionlint/.github/workflows/release.yaml \
+            --source-ref "refs/tags/v${v}"
+          tar -xzf "${tgz}" -C bin jactionlint
+          echo "${dir}/bin" >> "${GITHUB_PATH}"
+      - name: Show tools
+        run: |
+          jactionlint --version
+          shellcheck --version
+      - name: make lint-actions
+        run: make lint-actions
 
   quality:
     name: Swift quality (macOS)
     runs-on: macos-latest
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Install tools (mise.toml)
-        uses: jdx/mise-action@v5
+        uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
       - name: Show toolchain
         run: swift --version
       - name: Cache SwiftPM build
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .build
           key: ${{ runner.os }}-swiftpm-${{ hashFiles('mise.toml') }}-${{ hashFiles('Package.resolved') }}
           restore-keys: |
             ${{ runner.os }}-swiftpm-${{ hashFiles('mise.toml') }}-
-      - name: Run quality checks
+      # Workflow lint runs in actions-lint above.
+      - name: make check (swift format, shellcheck, build, test)
         run: make check
 
   bundle:
     name: Bundle smoke test (universal)
     runs-on: macos-latest
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Install tools (mise.toml)
-        uses: jdx/mise-action@v5
+        uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
       - name: Show toolchain
         run: swift --version
-      - name: Build universal app bundle (ad-hoc signed)
-        run: make bundle-universal
+      # The same two steps as the release build, ad hoc: CI never sees the signing key.
+      - name: Build universal binary
+        run: BUILD_ONLY=1 ARCHS=universal scripts/bundle.sh
+      - name: Bundle the app (ad-hoc signed)
+        run: SKIP_BUILD=1 ARCHS=universal scripts/bundle.sh
       - name: Verify bundle
         run: |
           set -euo pipefail
@@ -71,7 +141,7 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "${APP}"
           "${BIN}" --version
       - name: Upload bundle
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: quartz-drop-macos-universal
           retention-days: 7

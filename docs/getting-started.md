@@ -41,15 +41,15 @@ Finder instead, use the release download below.
 2. Verify it (see [Distribution](distribution.md#verifying-a-download)).
 3. Copy `QuartzDrop.app` to `/Applications`. When upgrading, quit quartz-drop and delete the old
    copy first.
-4. If the release is not notarized, clear the quarantine flag once:
+4. Releases are not notarized by Apple, so clear the quarantine flag once:
 
    ```bash
    xattr -dr com.apple.quarantine /Applications/QuartzDrop.app
    ```
 
-Releases are signed with a Developer ID and notarized only when the maintainers' signing secrets
-are configured; otherwise they are ad-hoc signed. An ad-hoc signed release downloaded in a browser
-is still quarantined, so step 4 applies to it.
+Releases are signed with quartz-drop's own certificate rather than an Apple Developer ID, so a
+copy downloaded in a browser is still quarantined, but macOS keeps the Accessibility permission
+across updates ([details](distribution.md#signing)).
 
 ### From source
 
@@ -69,8 +69,8 @@ but additionally applies the `[bootstrap]` section of your global mise config. W
 Makefile targets use whatever `swift` is on `PATH`; universal builds need the swift.org toolchain
 because the Command Line Tools' own Swift lacks x86_64 compatibility libraries.
 
-Set `CODESIGN_IDENTITY` to sign with a Developer ID instead of an ad-hoc signature; see
-[Distribution](distribution.md).
+Set `CODESIGN_IDENTITY` to the SHA-1 of a code-signing certificate (for example a local dev one)
+instead of an ad-hoc signature; see [Distribution](distribution.md#signing).
 
 ## Permissions
 
@@ -80,7 +80,8 @@ and Settings → Permissions shows the status until it is granted.
 
 macOS ties the permission to the code signature. Ad-hoc signed and self-built binaries get a new
 signature on every rebuild, so remove `QuartzDrop` from the Accessibility list and add it again
-after each rebuild. A stable Developer ID signature avoids this.
+after each rebuild. Releases, and builds signed with your own certificate, keep a stable signature
+and avoid this.
 
 ## First run
 

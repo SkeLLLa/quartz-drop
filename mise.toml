@@ -8,9 +8,9 @@
 [tools]
 # swift.org toolchain (includes `swift format`); the macOS SDK still comes from the Xcode
 # Command Line Tools or Xcode.
-swift = "6.4.0"
+swift = "6.4.1"
 # Maintained actionlint fork (https://github.com/jdx/jactionlint).
-jactionlint = "1.8.2"
+jactionlint = "2.3.0"
 shellcheck = "0.11.0"
 
 # Tasks wrap the Makefile so `make <target>` keeps working without mise.
@@ -42,11 +42,16 @@ description = "Format Swift sources in place"
 run = "make fmt"
 
 [tasks.lint]
-description = "Check formatting, workflows, and shell scripts"
+description = "Check formatting, shell scripts, and action pins"
 run = "make lint"
 
+[tasks."lint:actions"]
+description = "jactionlint (with shellcheck) on the GitHub workflows and dependabot.yml"
+run = "make lint-actions"
+
 [tasks.check]
-description = "Everything CI checks: lint, build, test"
+description = "Everything CI checks: lint, workflow lint, build, test"
+depends = ["lint:actions"]
 run = "make check"
 
 [tasks.artwork]

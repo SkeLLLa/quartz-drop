@@ -1,0 +1,16 @@
+# Staged copy of the mise registry entry for quartz-drop.
+#
+# mise doesn't read it from here. Once quartz-drop meets mise's popularity bar
+# (https://mise.jdx.dev/contributing.html#adding-tools), copy this file to
+# registry/quartz-drop.toml in a jdx/mise PR.
+#
+# Every release since v0.1.0 carries packslip.sigstore.json, so packslip is the only backend.
+
+version_order = "semver"
+description = "Dropdown windows for any Mac app, on a hotkey"
+backends = [
+  { full = "packslip:github.com/SkeLLLa/quartz-drop", min_version = "0.1.0" },
+]
+bins = ["quartz-drop"]
+os = ["macos"] # one universal (arm64 + x86_64) build
+test = { cmd = "quartz-drop --version", expected = "quartz-drop {{version}}" }

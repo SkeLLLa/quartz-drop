@@ -10,7 +10,7 @@ Project context:
 - `Sources/QuartzDrop` holds the AppKit, Accessibility (AX) and Carbon hotkey glue plus the menu-bar UI.
 - `Tests/` uses Swift Testing (`import Testing`, `@Test`, `#expect`), not XCTest.
 - Version lives in `version.txt` and `Sources/QuartzDrop/Version.swift` ; the release workflow (git-cliff, from Conventional Commits) updates both plus `CHANGELOG.md`. Do not suggest hand-editing them.
-- Tools are pinned in `mise.toml`/`mise.lock` (Swift, jactionlint, shellcheck) and installed in CI by `jdx/mise-action`. The primary local validation command is `mise run check` (= `make check`: swift format lint, jactionlint, shellcheck, swift build, swift test). App bundles are built by `scripts/bundle.sh`.
+- Tools are pinned in `mise.toml`/`mise.lock` (Swift, jactionlint, shellcheck) and installed in CI by `jdx/mise-action`. The primary local validation command is `mise run check` (= `make check` plus `make lint-actions`: swift format lint, shellcheck, action pin check, jactionlint, swift build, swift test). App bundles are built by `scripts/bundle.sh`.
 - `resources/example-config.toml` is mirrored in `Sources/QuartzDropCore/ExampleConfig.swift` (`ExampleConfigTests` checks they match). Config keys and menu contents are documented in `README.md` and `docs/`; keep them in sync with code changes (including the Support Ukraine links in `SupportLinks.swift`).
 - Animations are not supported; `[app.animation]` is validated like plasma-drop and ignored. Options that do not apply on macOS are "ignored on macOS" notes, never errors.
 
@@ -29,7 +29,8 @@ macOS limitations to respect (do not suggest code that assumes otherwise):
 Review focus:
 - Behavior regressions in window matching, AX calls (check `AXError` handling and nil results), hotkey registration/unregistration, config loading, and app lifecycle.
 - Config changes must stay backward compatible or include clear migration behavior.
-- Release workflow changes: universal (arm64 + x86_64) bundle, code signing/notarization paths, checksums, and provenance attestation must stay consistent.
+- Workflow changes: every `uses:` must be pinned to a full 40-hex commit SHA with a `# vX.Y.Z` comment (`make lint-pins`), jobs keep `permissions` minimal and a `timeout-minutes`.
+- Release workflow changes: universal (arm64 + x86_64) bundle, the pinned self-signed code signing (`packaging/signing/release.sha1`, `macos-signing` environment), checksums, and provenance attestation must stay consistent.
 - Core logic changes should come with Swift Testing coverage in `Tests/`.
 
 Expected validation:

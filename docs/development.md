@@ -7,7 +7,7 @@ Tools are pinned with [mise](https://mise.jdx.dev) in `mise.toml` and `mise.lock
 | Tool        | Version | Notes                                                  |
 | ----------- | ------- | ------------------------------------------------------ |
 | swift       | 6.4.0   | swift.org toolchain; includes `swift format`           |
-| jactionlint | 1.8.2   | jdx's maintained actionlint fork                       |
+| jactionlint | 2.3.0   | jdx's maintained actionlint fork                       |
 | shellcheck  | 0.11.0  |                                                        |
 
 The macOS SDK comes from the Xcode Command Line Tools (or Xcode).
@@ -54,16 +54,20 @@ Releases are cut directly from `master` with [git-cliff](https://git-cliff.org) 
 `cliff.toml`, pinned to 2.14.2 in the workflow). There is no release pull request.
 
 1. Use Conventional Commits (`feat:`, `fix:`, ...) on pull requests to `master`.
-2. On every push to `master` (except commits containing `[skip ci]`), `release.yml` runs the
-   quality gate (`mise run check`), then the `release` job. git-cliff computes the next version
-   from the commits since the last tag: the first release is `v0.1.0`, afterwards `feat` bumps the
-   minor version and everything else bumps the patch. If there is nothing new, no release is made.
-3. The job regenerates `CHANGELOG.md`, writes `version.txt` and `Sources/QuartzDrop/Version.swift`,
-   commits `chore(release): vX [skip ci]` to `master` as `github-actions[bot]`, tags `vX`, and
-   creates the GitHub release with the git-cliff notes. Do not edit those files by hand.
-4. The `build` job builds the universal app, optionally signs and notarizes it, and attaches the
-   artifacts. The `packslip`, `publish-packslip` and `verify-packslip` jobs sign and publish the
-   packslip manifest; see [Distribution](distribution.md).
+2. On every push to `master` (except commits containing `[skip ci]`), `release.yml` checks that
+   every action is pinned, then runs the quality gate (`mise run check`) and the `prepare` job.
+   git-cliff computes the next version from the commits since the last tag: the first release is
+   `v0.1.0`, afterwards `feat` bumps the minor version and everything else bumps the patch. If
+   there is nothing new, no release is made.
+3. The `build` job builds and signs the universal app with the version applied locally, and
+   `checksums` hashes and attests it.
+4. Only when all of that passed, `publish` regenerates `CHANGELOG.md`, writes `version.txt` and
+   `Sources/QuartzDrop/Version.swift` (`scripts/set-version.sh`), commits
+   `chore(release): vX [skip ci]` to `master` as `github-actions[bot]`, tags `vX`, and creates the
+   GitHub release with the git-cliff notes and the assets. Do not edit those files by hand. If a
+   run fails after the tag, re-run it to finish the release. The `packslip`, `publish-packslip`
+   and `verify-packslip` jobs sign and publish the packslip manifest; see
+   [Distribution](distribution.md).
 
 The workflow uses the default `GITHUB_TOKEN`: no PAT and no "Allow GitHub Actions to create pull
 requests" setting. `master` must allow `github-actions[bot]` to push, so branch protection must
@@ -80,19 +84,9 @@ The signer pin is `ps1_3lbhdizx3fdmmm5ki37kzixcwy` (printed by `verify-packslip`
 set as the repository variable `PACKSLIP_PIN` (Settings → Secrets and variables → Actions →
 Variables) and listed in the README; if it ever changes, update both.
 
-Optional signing secrets (all repository secrets; signing is skipped when
-`MACOS_CERTIFICATE_P12` is empty):
-
-| Secret                       | Purpose                                             |
-| ---------------------------- | --------------------------------------------------- |
-| `MACOS_CERTIFICATE_P12`      | Base64 Developer ID Application certificate (.p12)  |
-| `MACOS_CERTIFICATE_PASSWORD` | Password of the .p12                                |
-| `MACOS_SIGNING_IDENTITY`     | Signing identity, passed as `CODESIGN_IDENTITY`     |
-| `APPLE_ID`                   | Apple ID for notarization                           |
-| `APPLE_TEAM_ID`              | Team ID for notarization                            |
-| `APPLE_APP_PASSWORD`         | App-specific password for notarization              |
-
-Notarization runs only when all six are set.
+Releases are signed with quartz-drop's own certificate, pinned in
+`packaging/signing/release.sha1`, with the key in the `macos-signing` environment's secrets. See
+[Distribution: Signing](distribution.md#signing) for the setup.
 
 ## Artwork
 

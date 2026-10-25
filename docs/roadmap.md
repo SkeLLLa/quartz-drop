@@ -23,11 +23,8 @@ https://github.com/SkeLLLa/quartz-drop, follow Conventional Commits, and see
 
 - [ ] **Homebrew cask.** Publish a cask in a `SkeLLLa/homebrew-tap` tap, bumped by the release
   workflow.
-- [ ] **Developer ID signing and notarization in CI.** The workflow supports it; it needs the
-  signing secrets and an Apple Developer account. Until then releases are ad-hoc signed and
-  Accessibility permission must be re-granted after each update.
 - [ ] **Separate arm64 and x86_64 archives**, if there is demand for smaller downloads.
 - [ ] **DMG.** Ship a disk image with an Applications shortcut next to the zip and tar.gz.
 - [ ] **mise registry listing**, so `mise use quartz-drop` works without the `packslip:` backend
-  prefix.
+  prefix. The entry is staged in `packaging/mise-registry/quartz-drop.toml`.
 - [ ] **MacPorts and Nix (nix-darwin) packages.**

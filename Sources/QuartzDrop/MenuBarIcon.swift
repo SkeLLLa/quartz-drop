@@ -5,7 +5,8 @@ import AppKit
 enum MenuBarIcon {
     static func make() -> NSImage {
         let image = NSImage(size: NSSize(width: 18, height: 18), flipped: true) { rect in
-            // Drawn in the 44 x 56 coordinates of the compact mark, scaled to 16 pt tall.
+            // Drawn in the 44 x 56 coordinates of the compact mark
+            // (resources/icons/quartz-drop-mono.svg), scaled to 16 pt tall.
             let scale = (rect.height - 2) / 56
             var transform = AffineTransform(scale: scale)
             transform.append(AffineTransform(translationByX: (rect.width - 44 * scale) / 2, byY: 1))

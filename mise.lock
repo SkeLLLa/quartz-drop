@@ -3,21 +3,36 @@
 lockfile_version = 3
 
 [[tools.jactionlint]]
-version = "1.8.2"
+version = "2.3.0"
 backend = "github:jdx/jactionlint"
-specifiers = ["1.8.2"]
+specifiers = ["2.3.0"]
 
 [tools.jactionlint."platforms.macos-arm64"]
-checksum = "sha256:de9eb05af3cde409dc0b37fe2fd6a21b875a575374e7b26c02d45a7086645c28"
-url = "https://github.com/jdx/jactionlint/releases/download/v1.8.2/jactionlint_1.8.2_darwin_arm64.tar.gz"
-url_api = "https://api.github.com/repos/jdx/jactionlint/releases/assets/611338605"
+checksum = "sha256:f96afa36578b21290203ae8df4fa7ac3bf5aba08ed288df28cb0530af7ca6e55"
+url = "https://github.com/jdx/jactionlint/releases/download/v2.3.0/jactionlint_2.3.0_darwin_arm64.tar.gz"
+url_api = "https://api.github.com/repos/jdx/jactionlint/releases/assets/662210452"
 provenance = "github-attestations"
 
 [tools.jactionlint."platforms.macos-x64"]
-checksum = "sha256:42790b2565759b7f4a81696fb9034b2060f97f551d2ced54cf722c9de9abe6b2"
-url = "https://github.com/jdx/jactionlint/releases/download/v1.8.2/jactionlint_1.8.2_darwin_amd64.tar.gz"
-url_api = "https://api.github.com/repos/jdx/jactionlint/releases/assets/611338604"
+checksum = "sha256:a61006b669ec0ab1266c73e3561eecf839537eb6e8b3b6be766a55ba17fcbe42"
+url = "https://github.com/jdx/jactionlint/releases/download/v2.3.0/jactionlint_2.3.0_darwin_amd64.tar.gz"
+url_api = "https://api.github.com/repos/jdx/jactionlint/releases/assets/662210428"
 provenance = "github-attestations"
+
+[[tools.resvg]]
+version = "0.48.1"
+backend = "aqua:linebender/resvg"
+specifiers = ["0.48.1"]
+
+[tools.resvg."platforms.macos-arm64"]
+checksum = "sha256:06440eb5aa14a28cbfc7e40ae39e1ffa71adc051b89fbaa913b4f1d9b905d09f"
+url = "https://github.com/linebender/resvg/releases/download/v0.48.1/resvg-macos-aarch64.zip"
+url_api = "https://api.github.com/repos/linebender/resvg/releases/assets/498965947"
+
+[tools.resvg."platforms.macos-x64"]
+checksum = "sha256:0135923e443863db251a26bd78eabc6efb4b59d67b8cdc5469e3e1da26bc0ce2"
+url = "https://github.com/linebender/resvg/releases/download/v0.48.1/resvg-macos-x86_64.zip"
+url_api = "https://api.github.com/repos/linebender/resvg/releases/assets/498967669"
 
 [[tools.shellcheck]]
 version = "0.11.0"
@@ -35,12 +50,6 @@ url = "https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellche
 url_api = "https://api.github.com/repos/koalaman/shellcheck/releases/assets/279056930"
 
 [[tools.swift]]
-version = "6.4.0"
+version = "6.4.1"
 backend = "core:swift"
-specifiers = ["6.4.0"]
-
-[tools.swift."platforms.macos-arm64"]
-url = "https://download.swift.org/swift-6.4.0-release/xcode/swift-6.4.0-RELEASE/swift-6.4.0-RELEASE-osx.pkg"
-
-[tools.swift."platforms.macos-x64"]
-url = "https://download.swift.org/swift-6.4.0-release/xcode/swift-6.4.0-RELEASE/swift-6.4.0-RELEASE-osx.pkg"
+specifiers = ["6.4.1"]

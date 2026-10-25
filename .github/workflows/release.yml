@@ -1,3 +1,4 @@
+# Release fails closed until every action is pinned to a commit SHA (pin-gate).
 name: Release
 
 on:
@@ -5,56 +6,108 @@ on:
     branches:
       - master
 
+# One release at a time: a push during a release waits for it instead of cancelling it.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+# Nothing is granted by default; each job asks for what it needs.
+permissions: {}
+
 jobs:
+  pin-gate:
+    name: Action pin gate
+    if: ${{ github.repository_owner == 'SkeLLLa' && !contains(github.event.head_commit.message, '[skip ci]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Require every action in every workflow to be pinned
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Fetch every workflow, and the checker, as committed at the triggering SHA; no
+          # checkout, no third-party action. Fails closed: no files, no listing or any failed
+          # fetch fails the gate, and so does an unpinned action in ci.yml.
+          dir="${RUNNER_TEMP}/workflows"
+          mkdir -p "${dir}"
+          fetch() {
+            gh api -H "Accept: application/vnd.github.raw" \
+              "repos/${GITHUB_REPOSITORY}/contents/$1?ref=${GITHUB_SHA}"
+          }
+          names="$(
+            gh api "repos/${GITHUB_REPOSITORY}/contents/.github/workflows?ref=${GITHUB_SHA}" \
+              --jq '.[] | select(.type == "file") | select(.name | test("\\.ya?ml$")) | .name'
+          )"
+          if [ -z "${names}" ]; then
+            echo "::error::no workflow files found at ${GITHUB_SHA}"
+            exit 1
+          fi
+          files=()
+          while IFS= read -r name; do
+            case "${name}" in */* | "") echo "::error::unexpected workflow name"; exit 1 ;; esac
+            fetch ".github/workflows/${name}" > "${dir}/${name}"
+            files+=("${dir}/${name}")
+          done <<< "${names}"
+          fetch scripts/check-action-pins.sh > "${RUNNER_TEMP}/check-action-pins.sh"
+          sh "${RUNNER_TEMP}/check-action-pins.sh" "${files[@]}"
+
   quality:
     name: Quality gate
+    needs: pin-gate
     if: ${{ github.repository_owner == 'SkeLLLa' && !contains(github.event.head_commit.message, '[skip ci]') }}
     runs-on: macos-latest
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Install tools (mise.toml)
-        uses: jdx/mise-action@v5
+        uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
 
       - name: Run checks
         run: mise run check
 
-  # Same flow as the sibling Rust repos' release-plz setup, with git-cliff: bump the version,
-  # commit it to master as github-actions[bot], tag, and create the release. No release PR, so
-  # the default GITHUB_TOKEN is enough.
-  release:
-    name: Release
-    needs: quality
+  # Same flow as the sibling Rust repos, with git-cliff: compute the version and notes here,
+  # build and check them, and only then let `publish` commit the bump to master as
+  # github-actions[bot], tag it and create the release. No release PR, so the default
+  # GITHUB_TOKEN is enough. Nothing is pushed or published if any job before `publish` fails.
+  prepare:
+    name: Prepare release
+    needs: pin-gate
     if: ${{ github.repository_owner == 'SkeLLLa' && !contains(github.event.head_commit.message, '[skip ci]') }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
-      released: ${{ steps.release.outputs.released }}
-      version: ${{ steps.release.outputs.version }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
-    concurrency:
-      group: release-${{ github.ref }}
-      cancel-in-progress: false
+      released: ${{ steps.prepare.outputs.released }}
+      version: ${{ steps.prepare.outputs.version }}
+      tag_name: ${{ steps.prepare.outputs.tag_name }}
+      base_sha: ${{ steps.prepare.outputs.base_sha }}
+      source_date_epoch: ${{ steps.prepare.outputs.source_date_epoch }}
     permissions:
-      contents: write
+      contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # The commit that triggered the run, also on a rerun, even if master has moved on.
+          ref: ${{ github.sha }}
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
       - name: Install git-cliff
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2.87.30
         with:
           tool: git-cliff@2.14.2
 
-      - name: Bump version, commit, tag, and create the release
-        id: release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Compute the version and notes
+        id: prepare
         run: |
           set -euo pipefail
           # cliff.toml: the first release is v0.1.0; afterwards feat bumps minor, others patch.
@@ -66,124 +119,169 @@ jobs:
             TAG_NAME="${PINNED}"
           fi
           VERSION="${TAG_NAME#v}"
+          BASE_SHA="$(git rev-parse HEAD)"
+          # The About panel's build date: the commit time, so a rebuild stamps the same date.
+          SOURCE_DATE_EPOCH="$(git log -1 --format=%ct HEAD)"
           if git rev-parse -q --verify "refs/tags/${TAG_NAME}" > /dev/null; then
-            echo "Nothing to release: ${TAG_NAME} already exists"
-            echo "released=false" >> "${GITHUB_OUTPUT}"
-            exit 0
+            # A tag on the bump commit made from this very commit means an earlier run of this
+            # workflow got as far as tagging; build again and let `publish` finish the release.
+            if [ "$(git rev-parse -q --verify "refs/tags/${TAG_NAME}^{commit}^" || true)" = "${BASE_SHA}" ]; then
+              echo "${TAG_NAME} was tagged from ${BASE_SHA} by an earlier run: resuming"
+            else
+              echo "Nothing to release: ${TAG_NAME} already exists"
+              echo "released=false" >> "${GITHUB_OUTPUT}"
+              exit 0
+            fi
           fi
-          NOTES="${RUNNER_TEMP}/notes.md"
-          git cliff --unreleased --tag "${TAG_NAME}" --strip all > "${NOTES}"
-          git cliff --tag "${TAG_NAME}" --output CHANGELOG.md
-          echo "${VERSION}" > version.txt
-          sed -i "s/^let appVersion = \".*\"/let appVersion = \"${VERSION}\"/" Sources/QuartzDrop/Version.swift
-          grep -qF "let appVersion = \"${VERSION}\"" Sources/QuartzDrop/Version.swift
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add CHANGELOG.md version.txt Sources/QuartzDrop/Version.swift
-          git commit -m "chore(release): ${TAG_NAME} [skip ci]"
-          git tag "${TAG_NAME}"
-          git push --atomic origin HEAD:master "refs/tags/${TAG_NAME}"
-          gh release create "${TAG_NAME}" --title "${TAG_NAME}" --notes-file "${NOTES}" --verify-tag
+          mkdir -p prepared
+          git cliff --unreleased --tag "${TAG_NAME}" --strip all > prepared/NOTES.md
+          git cliff --tag "${TAG_NAME}" --output prepared/CHANGELOG.md
           {
             echo "released=true"
             echo "version=${VERSION}"
             echo "tag_name=${TAG_NAME}"
+            echo "base_sha=${BASE_SHA}"
+            echo "source_date_epoch=${SOURCE_DATE_EPOCH}"
           } >> "${GITHUB_OUTPUT}"
 
-  build:
-    name: Build and publish macOS assets
-    needs: release
-    if: ${{ needs.release.outputs.released == 'true' }}
-    runs-on: macos-latest
-    permissions:
-      contents: write
-      id-token: write
-      attestations: write
-    env:
-      VERSION: ${{ needs.release.outputs.version }}
-      TAG_NAME: ${{ needs.release.outputs.tag_name }}
-      # Optional Developer ID signing + notarization; skipped when secrets are absent.
-      MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
-      MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
-      MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
-      APPLE_ID: ${{ secrets.APPLE_ID }}
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
-    steps:
-      - name: Checkout release tag
-        uses: actions/checkout@v7
+      - name: Keep the notes and changelog
+        if: ${{ steps.prepare.outputs.released == 'true' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          ref: ${{ needs.release.outputs.tag_name }}
+          name: prepared-notes
+          retention-days: 1
+          if-no-files-found: error
+          path: |
+            prepared/NOTES.md
+            prepared/CHANGELOG.md
+
+  build:
+    name: Build macOS assets
+    needs: prepare
+    if: ${{ needs.prepare.outputs.released == 'true' }}
+    runs-on: macos-latest
+    timeout-minutes: 25
+    # Checksums and provenance come from the checksums job, the release from publish.
+    permissions:
+      contents: read
+    # The signing key lives only in this environment's secrets. Its deployment-branch rule
+    # (master only) keeps it out of reach of workflows run from any other branch, tag or PR;
+    # see docs/distribution.md#signing.
+    environment: macos-signing
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      # Read by scripts/bundle.sh instead of asking git: the tree carries the uncommitted bump.
+      QUARTZ_DROP_COMMIT: ${{ needs.prepare.outputs.base_sha }}
+      SOURCE_DATE_EPOCH: ${{ needs.prepare.outputs.source_date_epoch }}
+      ARCHS: universal
+      # A presence flag only (a boolean, never a secret value); each secret itself is set in the
+      # env of the one step that needs it.
+      SIGNING_CONFIGURED: ${{ secrets.MACOS_CERTIFICATE_P12 != '' && secrets.MACOS_CERTIFICATE_PASSWORD != '' }}
+    steps:
+      - name: Checkout the base commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.base_sha }}
+          persist-credentials: false
+
+      # The bump is only committed by `publish`; the build applies the same one locally.
+      - name: Apply the release version
+        run: scripts/set-version.sh "${VERSION}"
+
+      # The committed pin is the signing identity. Once it exists every release must be signed
+      # with it: an ad-hoc or differently signed release would reset every user's Accessibility
+      # grant.
+      - name: Resolve the signing identity
+        run: |
+          set -euo pipefail
+          PIN_FILE="packaging/signing/release.sha1"
+          if [ -f "${PIN_FILE}" ]; then
+            PIN="$(tr -d '[:space:]' < "${PIN_FILE}" | tr '[:lower:]' '[:upper:]')"
+            if ! printf '%s' "${PIN}" | grep -Eq '^[0-9A-F]{40}$'; then
+              echo "::error::${PIN_FILE} must hold one 40-digit SHA-1"
+              exit 1
+            fi
+            if [ "${SIGNING_CONFIGURED}" != "true" ]; then
+              echo "::error::${PIN_FILE} is committed but the macos-signing environment has no MACOS_CERTIFICATE_P12 / MACOS_CERTIFICATE_PASSWORD"
+              exit 1
+            fi
+            echo "CODESIGN_IDENTITY=${PIN}" >> "${GITHUB_ENV}"
+          elif [ "${SIGNING_CONFIGURED}" = "true" ]; then
+            echo "::error::signing secrets are set but ${PIN_FILE} is missing; commit the certificate's SHA-1"
+            exit 1
+          fi
 
       - name: Install tools (mise.toml)
-        uses: jdx/mise-action@v5
+        uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
 
       - name: Show toolchain
         run: swift --version
 
-      - name: Import Developer ID certificate
-        if: ${{ env.MACOS_CERTIFICATE_P12 != '' }}
+      # Compiled before the key is imported, so no package manifest or plugin runs while it is
+      # in a keychain.
+      - name: Build universal binary
+        run: BUILD_ONLY=1 scripts/bundle.sh
+
+      - name: Import the signing certificate
+        if: ${{ env.SIGNING_CONFIGURED == 'true' }}
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
         run: |
           set -euo pipefail
+          umask 077
           KEYCHAIN="${RUNNER_TEMP}/build.keychain-db"
           KEYCHAIN_PASSWORD="$(uuidgen)"
+          echo "::add-mask::${KEYCHAIN_PASSWORD}"
           echo "${MACOS_CERTIFICATE_P12}" | base64 --decode > "${RUNNER_TEMP}/certificate.p12"
           security create-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN}"
-          security set-keychain-settings -lut 21600 "${KEYCHAIN}"
+          security set-keychain-settings -lut 900 "${KEYCHAIN}"
           security unlock-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN}"
+          # -x: the private key can't be exported again; -T: only codesign may use it.
           security import "${RUNNER_TEMP}/certificate.p12" -P "${MACOS_CERTIFICATE_PASSWORD}" \
-            -A -t cert -f pkcs12 -k "${KEYCHAIN}"
+            -x -t agg -f pkcs12 -k "${KEYCHAIN}" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s \
-            -k "${KEYCHAIN_PASSWORD}" "${KEYCHAIN}"
+            -k "${KEYCHAIN_PASSWORD}" "${KEYCHAIN}" > /dev/null
           security list-keychains -d user -s "${KEYCHAIN}" login.keychain-db
           rm -f "${RUNNER_TEMP}/certificate.p12"
-          echo "CODESIGN_IDENTITY=${MACOS_SIGNING_IDENTITY}" >> "${GITHUB_ENV}"
+          # The secret must hold the pinned certificate, not just any identity.
+          if ! security find-identity -p codesigning "${KEYCHAIN}" | grep -q " ${CODESIGN_IDENTITY} "; then
+            echo "::error::MACOS_CERTIFICATE_P12 does not hold the identity pinned in packaging/signing/release.sha1"
+            exit 1
+          fi
 
-      - name: Build universal app bundle
-        env:
-          ARCHS: universal
-          OUT_DIR: dist
-        run: scripts/bundle.sh
+      # Assembles and signs only. CODESIGN_IDENTITY is the pin when signing (set above), unset
+      # otherwise: bundle.sh then signs ad hoc. With a pin it also verifies the requirement.
+      - name: Bundle and sign the app
+        run: SKIP_BUILD=1 scripts/bundle.sh
+
+      - name: Remove signing keychain and certificate
+        if: ${{ env.SIGNING_CONFIGURED == 'true' }}
+        run: |
+          rm -f "${RUNNER_TEMP}/certificate.p12"
+          security delete-keychain "${RUNNER_TEMP}/build.keychain-db" || true
 
       - name: Signing status
         run: |
           set -euo pipefail
           mkdir -p release-assets
           NOTES="release-assets/NOTES.md"
-          if [ -z "${MACOS_CERTIFICATE_P12}" ]; then
-            echo "::warning::Release is ad-hoc signed (signing secrets not configured)"
+          APP="/Applications/QuartzDrop.app"
+          if [ -z "${CODESIGN_IDENTITY:-}" ]; then
+            echo "::warning::Release is ad-hoc signed (packaging/signing/release.sha1 is not committed)"
             {
-              echo "> **Note:** this build is unsigned (ad-hoc signed) and not notarized."
-              echo "> After installing, run \`xattr -dr com.apple.quarantine /Applications/QuartzDrop.app\`"
-              echo "> and re-grant Accessibility permission after updating."
-            } > "${NOTES}"
-          elif [ -z "${APPLE_ID}" ] || [ -z "${APPLE_TEAM_ID}" ] || [ -z "${APPLE_APP_PASSWORD}" ]; then
-            echo "::warning::Release is signed but not notarized"
-            {
-              echo "> **Note:** this build is signed with a Developer ID but not notarized."
-              echo "> macOS Gatekeeper may warn on first launch; you may need to approve it in System Settings."
+              echo "> **Note:** this build is ad-hoc signed and not notarized by Apple, and macOS"
+              echo "> asks for the Accessibility permission again after each update."
+              echo "> After installing, run \`xattr -dr com.apple.quarantine ${APP}\`."
             } > "${NOTES}"
           else
-            : > "${NOTES}"
+            {
+              echo "> **Note:** this build is signed with quartz-drop's own certificate, not notarized by Apple."
+              echo "> After installing, run \`xattr -dr com.apple.quarantine ${APP}\`."
+              echo "> To check it, \`codesign -dr - ${APP}\` must print"
+              echo "> \`certificate leaf = H\"$(printf %s "${CODESIGN_IDENTITY}" | tr A-F a-f)\"\`."
+            } > "${NOTES}"
           fi
-
-      - name: Notarize and staple
-        if: ${{ env.MACOS_CERTIFICATE_P12 != '' && env.APPLE_ID != '' && env.APPLE_TEAM_ID != '' && env.APPLE_APP_PASSWORD != '' }}
-        run: |
-          set -euo pipefail
-          NOTARY_ZIP="${RUNNER_TEMP}/notarize.zip"
-          ditto -c -k --norsrc --noextattr --keepParent dist/QuartzDrop.app "${NOTARY_ZIP}"
-          xcrun notarytool submit "${NOTARY_ZIP}" \
-            --apple-id "${APPLE_ID}" \
-            --team-id "${APPLE_TEAM_ID}" \
-            --password "${APPLE_APP_PASSWORD}" \
-            --wait
-          xcrun stapler staple dist/QuartzDrop.app
-          xcrun stapler validate dist/QuartzDrop.app
-          spctl -a -vv -t exec dist/QuartzDrop.app
-          # Re-zip so the published archive contains the stapled ticket.
-          rm -f "dist/quartz-drop-${VERSION}-macos-universal.zip"
-          ditto -c -k --norsrc --noextattr --keepParent dist/QuartzDrop.app "dist/quartz-drop-${VERSION}-macos-universal.zip"
 
       - name: Assemble release assets
         run: |
@@ -193,43 +291,205 @@ jobs:
           TGZ="quartz-drop-${VERSION}-macos-universal.tar.gz"
           cp "dist/${ZIP}" "release-assets/${ZIP}"
           COPYFILE_DISABLE=1 tar --no-mac-metadata -C dist -czf "release-assets/${TGZ}" QuartzDrop.app
+
+      - name: Keep release assets
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-macos
+          retention-days: 1
+          if-no-files-found: error
+          path: |
+            release-assets/quartz-drop-${{ env.VERSION }}-macos-universal.zip
+            release-assets/quartz-drop-${{ env.VERSION }}-macos-universal.tar.gz
+
+      # The signing caveat, appended to the release notes by publish.
+      - name: Keep the release note
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: notes-macos
+          retention-days: 1
+          if-no-files-found: error
+          path: release-assets/NOTES.md
+
+      - name: Remove temporary keychain and certificate
+        if: ${{ always() && env.SIGNING_CONFIGURED == 'true' }}
+        run: |
+          rm -f "${RUNNER_TEMP}/certificate.p12"
+          security delete-keychain "${RUNNER_TEMP}/build.keychain-db" || true
+
+  # Hashes and attests the assets, on a job that never sees the signing key. The attestation is
+  # public, so this waits for the quality gate too.
+  checksums:
+    name: Checksums and provenance
+    needs: [quality, prepare, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - name: Fetch the assets
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-macos
+          path: release-assets
+
+      - name: Write checksums
+        run: |
+          set -euo pipefail
           cd release-assets
-          for f in "${ZIP}" "${TGZ}"; do
-            shasum -a 256 "${f}" > "${f}.sha256"
+          expected=(
+            "quartz-drop-${VERSION}-macos-universal.zip"
+            "quartz-drop-${VERSION}-macos-universal.tar.gz"
+          )
+          for f in "${expected[@]}"; do
+            test -f "${f}" || { echo "::error::${f} is missing"; exit 1; }
+            sha256sum "${f}" > "${f}.sha256"
           done
-          shasum -a 256 "${ZIP}" "${TGZ}" > SHA256SUMS
+          if [ "$(find . -maxdepth 1 -type f ! -name '*.sha256' | wc -l)" -ne "${#expected[@]}" ]; then
+            echo "::error::unexpected files in release-assets"
+            ls -la
+            exit 1
+          fi
+          sha256sum "${expected[@]}" > SHA256SUMS
           cat SHA256SUMS
 
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v4
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
             release-assets/quartz-drop-${{ env.VERSION }}-macos-universal.zip
             release-assets/quartz-drop-${{ env.VERSION }}-macos-universal.tar.gz
 
-      - name: Publish release assets
-        uses: softprops/action-gh-release@v3
+      # `publish` merges these with the assets.
+      - name: Keep the checksums
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          tag_name: ${{ env.TAG_NAME }}
-          append_body: true
-          body_path: release-assets/NOTES.md
-          fail_on_unmatched_files: true
-          files: |
-            release-assets/quartz-drop-${{ env.VERSION }}-macos-universal.zip
-            release-assets/quartz-drop-${{ env.VERSION }}-macos-universal.tar.gz
-            release-assets/quartz-drop-${{ env.VERSION }}-macos-universal.zip.sha256
-            release-assets/quartz-drop-${{ env.VERSION }}-macos-universal.tar.gz.sha256
+          name: checksums
+          retention-days: 1
+          if-no-files-found: error
+          path: |
+            release-assets/*.sha256
             release-assets/SHA256SUMS
 
-      - name: Remove temporary keychain
-        if: ${{ always() && env.MACOS_CERTIFICATE_P12 != '' }}
-        run: security delete-keychain "${RUNNER_TEMP}/build.keychain-db" || true
+  # The only job that changes the repository or the release page, and it runs only after the
+  # quality gate, the build and the checksums succeeded. It rebuilds nothing: it applies the
+  # version bump to the base commit, commits it, tags it and uploads the artifacts. The push is
+  # not forced, so it fails if master moved since the base commit. After a failure past the tag,
+  # "Re-run failed jobs" (or the whole run) finds the tag prepare saw and completes the release.
+  publish:
+    name: Publish release
+    needs: [quality, prepare, build, checksums]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      TAG_NAME: ${{ needs.prepare.outputs.tag_name }}
+      BASE_SHA: ${{ needs.prepare.outputs.base_sha }}
+    steps:
+      # This job pushes the bump and the tag, so its checkout keeps the token (the only one).
+      - name: Checkout the base commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.prepare.outputs.base_sha }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fetch the notes and changelog
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: "{prepared-notes,notes-macos}"
+          path: notes
+
+      - name: Fetch the assets and checksums
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: "{release-macos,checksums}"
+          path: release-assets
+          merge-multiple: true
+
+      - name: Check the assets
+        run: |
+          set -euo pipefail
+          cd release-assets
+          expected=(
+            "quartz-drop-${VERSION}-macos-universal.zip"
+            "quartz-drop-${VERSION}-macos-universal.tar.gz"
+          )
+          want=("${expected[@]}" SHA256SUMS)
+          for f in "${expected[@]}"; do want+=("${f}.sha256"); done
+          have="$(find . -maxdepth 1 -type f -printf '%f\n' | sort)"
+          if [ "${have}" != "$(printf '%s\n' "${want[@]}" | sort)" ]; then
+            echo "::error::release-assets is not the expected file set"
+            echo "${have}"
+            exit 1
+          fi
+          sha256sum --check --strict SHA256SUMS
+
+      - name: Commit the bump and tag it
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${BASE_SHA}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          remote_tag="$(git ls-remote --tags origin "refs/tags/${TAG_NAME}^{}" "refs/tags/${TAG_NAME}" | awk 'END { print $1 }')"
+          if [ -n "${remote_tag}" ]; then
+            # Only an earlier run of this workflow, from this same commit, may have made it.
+            git fetch --no-tags origin "refs/tags/${TAG_NAME}:refs/tags/${TAG_NAME}"
+            if [ "$(git rev-parse "refs/tags/${TAG_NAME}^{commit}^")" != "${BASE_SHA}" ]; then
+              echo "::error::${TAG_NAME} exists but was not made from ${BASE_SHA}"
+              exit 1
+            fi
+            echo "${TAG_NAME} already exists for ${BASE_SHA}: completing the release"
+            exit 0
+          fi
+          scripts/set-version.sh "${VERSION}"
+          cp notes/prepared-notes/CHANGELOG.md CHANGELOG.md
+          git add CHANGELOG.md version.txt Sources/QuartzDrop/Version.swift
+          git commit -m "chore(release): ${TAG_NAME} [skip ci]"
+          git tag "${TAG_NAME}"
+          # No force: fails, and nothing is pushed, if master has moved past the base commit.
+          git push --atomic origin HEAD:refs/heads/master "refs/tags/${TAG_NAME}"
+
+      - name: Compose the release notes
+        run: cat notes/prepared-notes/NOTES.md notes/notes-macos/NOTES.md > release-assets-notes.md
+
+      # Creates the release, or on a rerun updates its notes and replaces the assets. gh, not a
+      # release action: the job already holds the token.
+      - name: Create the release and upload the assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          assets=(
+            "release-assets/quartz-drop-${VERSION}-macos-universal.zip"
+            "release-assets/quartz-drop-${VERSION}-macos-universal.tar.gz"
+            "release-assets/quartz-drop-${VERSION}-macos-universal.zip.sha256"
+            "release-assets/quartz-drop-${VERSION}-macos-universal.tar.gz.sha256"
+            release-assets/SHA256SUMS
+          )
+          for asset in "${assets[@]}"; do
+            test -f "${asset}" || { echo "::error::missing asset ${asset}"; exit 1; }
+          done
+          if gh release view "${TAG_NAME}" > /dev/null 2>&1; then
+            gh release edit "${TAG_NAME}" --title "${TAG_NAME}" --notes-file release-assets-notes.md
+            gh release upload "${TAG_NAME}" "${assets[@]}" --clobber
+          else
+            gh release create "${TAG_NAME}" "${assets[@]}" --verify-tag \
+              --title "${TAG_NAME}" --notes-file release-assets-notes.md
+          fi
 
   packslip:
     name: Sign packslip manifest
-    needs: [release, build]
-    if: ${{ needs.release.outputs.released == 'true' }}
+    needs: [prepare, publish]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # Signing never holds release-write access; publish-packslip uploads the bundle.
     permissions:
       contents: read
@@ -241,7 +501,7 @@ jobs:
         id: source
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG_NAME: ${{ needs.release.outputs.tag_name }}
+          TAG_NAME: ${{ needs.prepare.outputs.tag_name }}
         run: |
           set -euo pipefail
           echo "commit=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${TAG_NAME}" --jq .sha)" >> "${GITHUB_OUTPUT}"
@@ -250,19 +510,19 @@ jobs:
       # arch). The command is the bundle's executable; the bundle itself is an app resource.
       - name: Sign packslip manifest
         id: packslip
-        uses: jdx/packslip@v1
+        uses: jdx/packslip@7d397618045bd98b76cd5cb8177767b2f52789b8 # v1.10.1
         with:
           download: quartz-drop-*-macos-universal.tar.gz
           bin: quartz-drop=QuartzDrop.app/Contents/MacOS/quartz-drop
           resources: app=archive:QuartzDrop.app
-          tag: ${{ needs.release.outputs.tag_name }}
-          version: ${{ needs.release.outputs.version }}
+          tag: ${{ needs.prepare.outputs.tag_name }}
+          version: ${{ needs.prepare.outputs.version }}
           commit: ${{ steps.source.outputs.commit }}
           attest: link
           upload: false
 
       - name: Keep signed bundle
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: packslip-bundle
           retention-days: 1
@@ -271,13 +531,14 @@ jobs:
 
   publish-packslip:
     name: Publish packslip manifest
-    needs: [release, packslip]
+    needs: [prepare, packslip]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
       - name: Fetch signed bundle
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: packslip-bundle
           path: packslip
@@ -285,7 +546,7 @@ jobs:
       - name: Upload signed bundle
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG_NAME: ${{ needs.release.outputs.tag_name }}
+          TAG_NAME: ${{ needs.prepare.outputs.tag_name }}
         run: |
           set -euo pipefail
           test -f packslip/packslip.sigstore.json
@@ -293,8 +554,9 @@ jobs:
 
   verify-packslip:
     name: Verify published packslip manifest
-    needs: [release, publish-packslip]
+    needs: [prepare, publish-packslip]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     env:
@@ -303,15 +565,15 @@ jobs:
       PACKSLIP_PIN: ${{ vars.PACKSLIP_PIN }}
     steps:
       - name: Install packslip
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@a4d3f3f761dcd95cce1b72cb61cb6d1963438177 # v2.87.30
         with:
           tool: packslip@1.6.0
 
       # Check what users download: the public release URLs, not this run's local files.
       - name: Verify manifest against the published tarball
         env:
-          TAG_NAME: ${{ needs.release.outputs.tag_name }}
-          VERSION: ${{ needs.release.outputs.version }}
+          TAG_NAME: ${{ needs.prepare.outputs.tag_name }}
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           set -euo pipefail
           base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG_NAME}"

@@ -19,6 +19,9 @@ you use.
 > **Setting up with an AI assistant?** Point it at [`README.ai.md`](README.ai.md). It contains
 > step-by-step instructions written for agents.
 
+**Contents:** [Install](#install) · [First run](#first-run) · [Configure](#configure) ·
+[Alternatives](#alternatives) · [Contributing](#contributing) · [Support Ukraine](#support-ukraine)
+
 ## What you get
 
 - **One hotkey per app.** It shows the app, focuses it, and hides it again.
@@ -51,7 +54,9 @@ Intel Macs.
    xattr -dr com.apple.quarantine /Applications/QuartzDrop.app
    ```
 
-   This is needed because releases aren't notarized by Apple yet.
+   You need this because the releases aren't notarized by Apple. They are signed with
+   quartz-drop's own certificate, so macOS keeps the Accessibility permission across updates
+   ([details](docs/distribution.md#signing)).
 
 <details>
 <summary>Other ways to install</summary>
@@ -83,6 +88,19 @@ Homebrew isn't available yet. If you'd like to help, see the [roadmap](docs/road
 
 </details>
 
+### Uninstall
+
+Quit quartz-drop and turn off **Launch at login** in Settings → General first, then:
+
+| Installed with   | Remove with                                                                                   |
+| ---------------- | --------------------------------------------------------------------------------------------- |
+| Release download | Delete `/Applications/QuartzDrop.app`                                                         |
+| mise             | `mise unuse -g packslip:github.com/SkeLLLa/quartz-drop`                                       |
+| packslip         | `rm ~/.local/bin/quartz-drop`, then delete the tree it linked to under `~/.local/share/packslip/` |
+
+Your config in `~/.config/quartz-drop` stays until you delete it. To clear the permission too,
+remove QuartzDrop from System Settings → Privacy & Security → Accessibility.
+
 ## First run
 
 1. Open QuartzDrop. It creates a starter config and opens its Settings window.
@@ -102,8 +120,9 @@ Homebrew isn't available yet. If you'd like to help, see the [roadmap](docs/road
 Want it running all the time? Turn on **Launch at login** in Settings → General.
 
 > [!TIP]
-> After an update, macOS may forget the Accessibility permission. If hotkeys stop moving
-> windows, remove QuartzDrop from the Accessibility list and add it again.
+> If hotkeys stop moving windows after an update (for example the first update from an older
+> ad-hoc signed release, or a build of your own), remove QuartzDrop from the Accessibility list
+> and add it again.
 
 More on settings, the menu bar menu, the command line and hotkey conflicts is in
 [Getting started](docs/getting-started.md).
@@ -157,7 +176,7 @@ All documentation: [Getting started](docs/getting-started.md) ·
 [Configuration](docs/configuration.md) · [Distribution](docs/distribution.md) ·
 [Development](docs/development.md) · [Roadmap](docs/roadmap.md)
 
-## Support
+## Support Ukraine
 
 If `quartz-drop` is useful to you and you want to say thanks, please consider supporting Ukrainian
 defenders instead of sending money to the author.

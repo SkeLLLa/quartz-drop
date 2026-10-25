@@ -211,9 +211,10 @@ Config edits apply automatically; Reload Config (⌘R in the menu bar menu) forc
 - **Hotkey does nothing:** it probably clashes with a system shortcut (see the ground rules), the
   config has an error (`quartz-drop check`), or an f-key is being used without `fn`. Try
   `ctrl+alt+<letter>`.
-- **Window isn't moved or resized:** Accessibility is missing. Ad-hoc signed and self-built
-  copies get a new signature on every rebuild or update, so the user must remove `QuartzDrop`
-  from the Accessibility list and add it again. Fixed-size windows are moved but not resized.
+- **Window isn't moved or resized:** Accessibility is missing. Releases are signed with a
+  stable certificate and keep the grant across updates, but ad-hoc signed and self-built copies
+  (and the first update from such a copy) look like a new app, so the user must remove
+  `QuartzDrop` from the Accessibility list and add it again. Fixed-size windows are moved but not resized.
 - **App not found or not started:** set `bundle_id` (the most reliable matcher), and check
   `attach_mode` (`find` never launches). `find-or-start` without `command`, `bundle_id` or
   `filename` can only attach to a running window.
