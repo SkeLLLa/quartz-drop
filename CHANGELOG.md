@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1](https://github.com/SkeLLLa/quartz-drop/compare/v1.1.0...v1.1.1) - 2026-10-30
+
+### Other
+
+- *(deps)* bump the all-actions group with 2 updates
 ## [1.1.0](https://github.com/SkeLLLa/quartz-drop/compare/v1.0.1...v1.1.0) - 2026-10-25
 
 ### Added
