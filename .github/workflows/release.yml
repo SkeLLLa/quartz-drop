@@ -69,7 +69,7 @@ jobs:
           persist-credentials: false
 
       - name: Install tools (mise.toml)
-        uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
+        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
 
       - name: Run checks
         run: mise run check
@@ -102,7 +102,7 @@ jobs:
           persist-credentials: false
 
       - name: Install git-cliff
-        uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
+        uses: taiki-e/install-action@68a389c788b2cd04016ce8c80ee23b80d2ab3d68 # v2.88.1
         with:
           tool: git-cliff@2.14.2
 
@@ -212,7 +212,7 @@ jobs:
           fi
 
       - name: Install tools (mise.toml)
-        uses: jdx/mise-action@82a612c5ab8bcda7cc5db6b7e81a8e7584c3dc6e # v5.2.3
+        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
 
       - name: Show toolchain
         run: swift --version
@@ -510,7 +510,7 @@ jobs:
       # arch). The command is the bundle's executable; the bundle itself is an app resource.
       - name: Sign packslip manifest
         id: packslip
-        uses: jdx/packslip@ddcddd9c8c33977d2d08d5db91caec579da59aab # v1.11.0
+        uses: jdx/packslip@b934a22ba187f1d3928441170b9413c5119360bf # v1.11.2
         with:
           download: quartz-drop-*-macos-universal.tar.gz
           bin: quartz-drop=QuartzDrop.app/Contents/MacOS/quartz-drop
@@ -565,7 +565,7 @@ jobs:
       PACKSLIP_PIN: ${{ vars.PACKSLIP_PIN }}
     steps:
       - name: Install packslip
-        uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
+        uses: taiki-e/install-action@68a389c788b2cd04016ce8c80ee23b80d2ab3d68 # v2.88.1
         with:
           tool: packslip@1.6.0
 
