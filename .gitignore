@@ -23,3 +23,7 @@ mise.local.toml
 *.swp
 *~
 .DS_Store
+
+# Output of scripts/demo-record.sh; published as GitHub attachments
+docs/media/demo.*
+docs/media/*.png

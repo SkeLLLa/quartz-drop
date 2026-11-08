@@ -16,6 +16,12 @@ say the left half of the screen, already focused. Press it again and it's gone. 
 running, quartz-drop starts it first. Think of a Quake-style dropdown terminal, but for every app
 you use.
 
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/b1a8b55e-673f-463e-ac93-3836b2458042" alt="Demo: Ctrl-Option-1 drops Dictionary into the left half, Ctrl-Option-2 drops Font Book into the right half and hides Dictionary" width="720">
+  <br>
+  <sub>Two apps on two hotkeys, left and right half (<a href="https://github.com/user-attachments/assets/a323d5d3-82cf-4897-8dd4-b6e648388118">watch as video</a>)</sub>
+</p>
+
 > **Setting up with an AI assistant?** Point it at [`README.ai.md`](README.ai.md). It contains
 > step-by-step instructions written for agents.
 
@@ -32,6 +38,18 @@ you use.
 - **Leaves no mess.** On quit, every window goes back where it was.
 - **Quiet.** No Dock icon. There's a small menu bar icon, and you can hide that too.
 - **A plain text config.** One TOML file that reloads as soon as you save it.
+
+<details>
+<summary>Screenshots</summary>
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/a07297e1-8868-4971-ba77-c0147319fb94" alt="Settings, General tab: config file, launch at login, menu bar icon" width="600">
+  <img src="https://github.com/user-attachments/assets/ca277518-b16c-4df6-ae76-06fefd0f3444" alt="Settings, Apps tab: configured apps with their hotkeys, matchers and placement" width="600">
+  <img src="https://github.com/user-attachments/assets/8b7ff2c7-935b-429b-a05c-ae83e7c66014" alt="Settings, Permissions tab: Accessibility access granted" width="600">
+  <img src="https://github.com/user-attachments/assets/e5c1c406-84af-4b55-a081-1bb580fc59a4" alt="About window with version, commit and license" width="320">
+</p>
+
+</details>
 
 quartz-drop is the macOS version of [plasma-drop](https://github.com/SkeLLLa/plasma-drop) for KDE
 Plasma, and reads the same config.
